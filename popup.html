@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ResAid</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 400px;
+      min-height: 500px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+    }
+    
+    .header {
+      background: white;
+      padding: 20px;
+      text-align: center;
+      border-bottom: 3px solid #667eea;
+    }
+    
+    .header h1 {
+      font-size: 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-weight: 700;
+    }
+    
+    .header p {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+    
+    .content {
+      background: white;
+      margin: 10px;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .section {
+      margin-bottom: 20px;
+    }
+    
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #333;
+    }
+    
+    .status {
+      padding: 12px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #555;
+    }
+    
+    .status.detected {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .status.warning {
+      background: #fff3e0;
+      color: #e65100;
+    }
+    
+    select, textarea, input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+    
+    button {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    
+    .small-btn {
+      font-size: 12px;
+      padding: 8px;
+      margin-top: 8px;
+    }
+    
+    .job-preview {
+      max-height: 100px;
+      overflow-y: auto;
+      font-size: 12px;
+      color: #666;
+      background: #f9f9f9;
+      padding: 8px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+    }
+    
+    .settings-link {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 12px;
+      color: #667eea;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>✨ ResAid</h1>
+    <p>Smart Resume Autofill</p>
+  </div>
+  
+  <div class="content">
+    <!-- Job Description Status -->
+    <div class="section">
+      <div class="section-title">Job Description</div>
+      <div id="jobStatus" class="status warning">
+        Not detected on this page
+      </div>
+      <div id="jobPreview" class="job-preview" style="display:none;"></div>
+      <button id="refreshJob" class="small-btn">Refresh Detection</button>
+    </div>
+    
+    <!-- Resume Selection -->
+    <div class="section">
+      <div class="section-title">Select Resume</div>
+      <select id="resumeSelect">
+        <option value="">Loading...</option>
+      </select>
+    </div>
+    
+    <!-- Custom Guidelines -->
+    <div class="section">
+      <div class="section-title">Answer Guidelines (Optional)</div>
+      <textarea id="guidelines" placeholder="e.g., Keep answers under 200 words, emphasize leadership skills, use active voice..."></textarea>
+    </div>
+    
+    <!-- Action -->
+    <div class="section">
+      <button id="enableAutofill">Enable Smart Autofill</button>
+    </div>
+    
+    <div class="settings-link" id="settingsLink">⚙️ Extension Settings</div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
