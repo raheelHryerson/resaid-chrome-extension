@@ -18,69 +18,91 @@ document.addEventListener('DOMContentLoaded', async () => {
   currentTab = tabs[0];
 
   // Load saved guidelines and API endpoint
-  const saved = await chrome.storage.sync.get(['guidelines', 'apiEndpoint']);
+  const saved = await chrome.storage.sync.get(['guidelines', 'apiEndpoint', 'apiKey']);
   if (saved.guidelines) {
     guidelinesInput.value = saved.guidelines;
   }
 
   const apiEndpoint = saved.apiEndpoint || 'http://localhost:3000';
-
-  // Fetch API key from server
-  async function fetchApiKey() {
-    try {
-      const response = await fetch(`${apiEndpoint}/api/user/api-key`);
-      if (response.ok) {
-        const data = await response.json();
-        apiKey = data.apiKey;
-        await chrome.storage.sync.set({ apiKey });
-        return apiKey;
-      }
-    } catch (err) {
-      console.error('Error fetching API key:', err);
-      // Try to use stored key
-      const stored = await chrome.storage.sync.get(['apiKey']);
-      apiKey = stored.apiKey || null;
-    }
-    return apiKey;
-  }
-
-  // Load API key on popup open
-  await fetchApiKey();
+  apiKey = saved.apiKey || null;
 
   if (!apiEndpoint) {
     jobStatus.className = 'status warning';
     jobStatus.textContent = '⚠️ API endpoint not configured. Click settings below.';
   }
 
+  if (!apiKey) {
+    jobStatus.className = 'status warning';
+    jobStatus.textContent = '⚠️ API key not set. Go to settings to add it.';
+  }
+
   // Load job description from storage
   async function loadJobDescription() {
-    const response = await chrome.runtime.sendMessage({
-      type: 'GET_JOB_DESCRIPTION',
-      tabId: currentTab.id
-    });
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'GET_JOB_DESCRIPTION',
+        tabId: currentTab.id
+      });
 
-    if (response.success && response.data) {
-      jobDescription = response.data;
-      jobStatus.className = 'status detected';
-      jobStatus.textContent = `✓ Job description detected (${jobDescription.text.length} chars)`;
-      jobPreview.style.display = 'block';
-      jobPreview.textContent = jobDescription.text.slice(0, 300) + '...';
-    } else {
-      // Try to get from content script directly
+      if (response.success && response.data) {
+        jobDescription = response.data;
+        jobStatus.className = 'status detected';
+        jobStatus.textContent = `✓ Job description detected (${jobDescription.text.length} chars)`;
+        jobPreview.style.display = 'block';
+        jobPreview.textContent = jobDescription.text.slice(0, 300) + '...';
+        return;
+      }
+    } catch (err) {
+      console.log('No cached job description, checking page...');
+    }
+
+    // Try to get from content script directly
+    try {
+      const contentResponse = await chrome.tabs.sendMessage(currentTab.id, {
+        type: 'GET_PAGE_JOB_DESCRIPTION'
+      });
+      
+      if (contentResponse && contentResponse.success && contentResponse.data) {
+        jobDescription = contentResponse.data;
+        jobStatus.className = 'status detected';
+        jobStatus.textContent = `✓ Job description detected (${jobDescription.text.length} chars)`;
+        jobPreview.style.display = 'block';
+        jobPreview.textContent = jobDescription.text.slice(0, 300) + '...';
+      } else {
+        jobStatus.className = 'status warning';
+        jobStatus.textContent = 'ℹ️ No job description found on this page';
+      }
+    } catch (err) {
+      // Content script not loaded - inject it
+      console.log('Content script not loaded, injecting...');
       try {
-        const contentResponse = await chrome.tabs.sendMessage(currentTab.id, {
+        await chrome.scripting.executeScript({
+          target: { tabId: currentTab.id },
+          files: ['content.js']
+        });
+        
+        // Wait a bit for script to initialize
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Try again
+        const retryResponse = await chrome.tabs.sendMessage(currentTab.id, {
           type: 'GET_PAGE_JOB_DESCRIPTION'
         });
         
-        if (contentResponse.success && contentResponse.data) {
-          jobDescription = contentResponse.data;
+        if (retryResponse && retryResponse.success && retryResponse.data) {
+          jobDescription = retryResponse.data;
           jobStatus.className = 'status detected';
           jobStatus.textContent = `✓ Job description detected (${jobDescription.text.length} chars)`;
           jobPreview.style.display = 'block';
           jobPreview.textContent = jobDescription.text.slice(0, 300) + '...';
+        } else {
+          jobStatus.className = 'status warning';
+          jobStatus.textContent = 'ℹ️ No job description found on this page';
         }
-      } catch (err) {
-        console.error('Could not load job description:', err);
+      } catch (injectErr) {
+        console.error('Could not inject content script:', injectErr);
+        jobStatus.className = 'status warning';
+        jobStatus.textContent = '⚠️ Please refresh the page and try again';
       }
     }
   }
@@ -92,7 +114,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const endpoint = config.apiEndpoint || 'http://localhost:3000';
       const key = config.apiKey || apiKey;
 
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers = { 'Content-Type': 'application/json' };
       if (key) {
         headers['Authorization'] = `Bearer ${key}`;
       }

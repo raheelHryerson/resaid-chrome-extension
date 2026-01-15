@@ -38,6 +38,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+
+  if (message.type === 'GET_AUTOFILL_CONTEXT') {
+    chrome.storage.session.get([`autofill_${sender.tab.id}`], (result) => {
+      const context = result[`autofill_${sender.tab.id}`];
+      sendResponse({ success: true, data: context });
+    });
+    return true;
+  }
+
+  if (message.type === 'GET_PERSONAL_INFO') {
+    chrome.storage.sync.get([
+      'fullName', 
+      'email', 
+      'phone', 
+      'linkedin', 
+      'location', 
+      'currentCompany'
+    ], (result) => {
+      sendResponse({ success: true, data: result });
+    });
+    return true;
+  }
 });
 
 async function handleGenerateAnswer(data, tabId) {
@@ -48,7 +70,7 @@ async function handleGenerateAnswer(data, tabId) {
   const endpoint = config.apiEndpoint || 'http://localhost:3000';
   const apiKey = config.apiKey;
 
-  const headers: Record<string, string> = {
+  const headers = {
     'Content-Type': 'application/json',
   };
   

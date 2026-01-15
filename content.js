@@ -42,9 +42,22 @@
     'div[role="textbox"]'
   ];
 
+  // Field patterns for instant autofill
+  const FIELD_PATTERNS = {
+    fullName: ['name', 'fullname', 'full_name', 'applicantname', 'candidatename', 'your name'],
+    firstName: ['firstname', 'first_name', 'fname', 'givenname'],
+    lastName: ['lastname', 'last_name', 'lname', 'surname', 'familyname'],
+    email: ['email', 'e-mail', 'emailaddress', 'mail'],
+    phone: ['phone', 'telephone', 'mobile', 'cell', 'phonenumber', 'contact'],
+    linkedin: ['linkedin', 'linkedinurl', 'linkedin_url', 'linkedinprofile'],
+    location: ['location', 'city', 'address', 'residence', 'currentlocation'],
+    currentCompany: ['company', 'employer', 'organization', 'currentcompany', 'current_company']
+  };
+
   // State
   let detectedJobDescription = null;
   let activeField = null;
+  let personalInfo = null;
 
   // Helper to get current tab ID
   async function getCurrentTabId() {
@@ -222,10 +235,12 @@
       btn.disabled = true;
       
       try {
-        // Get autofill context from session
-        const tabId = await getCurrentTabId();
-        const autofillData = await chrome.storage.session.get([`autofill_${tabId}`]);
-        const context = autofillData[`autofill_${tabId}`];
+        // Get autofill context from background script (avoids CSP issues)
+        const contextResponse = await chrome.runtime.sendMessage({
+          type: 'GET_AUTOFILL_CONTEXT'
+        });
+        
+        const context = contextResponse?.data;
         
         if (!context || !context.enabled) {
           throw new Error('Autofill not enabled. Open the extension popup first.');
@@ -272,6 +287,66 @@
     }, { once: true });
   }
 
+  // Detect field type based on attributes
+  function detectFieldType(field) {
+    const attributes = [
+      field.name,
+      field.id,
+      field.getAttribute('aria-label'),
+      field.getAttribute('placeholder'),
+      field.getAttribute('data-automation-id'),
+      field.className
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    for (const [fieldType, patterns] of Object.entries(FIELD_PATTERNS)) {
+      if (patterns.some(pattern => attributes.includes(pattern))) {
+        return fieldType;
+      }
+    }
+
+    return null;
+  }
+
+  // Auto-fill common fields
+  async function autoFillCommonFields() {
+    if (!personalInfo) {
+      // Load personal info from storage
+      const result = await chrome.runtime.sendMessage({ type: 'GET_PERSONAL_INFO' });
+      personalInfo = result?.data || {};
+    }
+
+    // Skip if no personal info
+    if (!personalInfo || Object.keys(personalInfo).length === 0) {
+      return;
+    }
+
+    // Find all input fields
+    const fields = document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input[type="url"]');
+    
+    for (const field of fields) {
+      // Skip if already filled
+      if (field.value && field.value.trim().length > 0) {
+        continue;
+      }
+
+      const fieldType = detectFieldType(field);
+      
+      if (fieldType && personalInfo[fieldType]) {
+        // Special handling for name fields
+        if (fieldType === 'firstName' && personalInfo.fullName) {
+          const firstName = personalInfo.fullName.split(' ')[0];
+          fillField(field, firstName);
+        } else if (fieldType === 'lastName' && personalInfo.fullName) {
+          const parts = personalInfo.fullName.split(' ');
+          const lastName = parts.slice(1).join(' ');
+          fillField(field, lastName);
+        } else {
+          fillField(field, personalInfo[fieldType]);
+        }
+      }
+    }
+  }
+
   // Auto-extract job description on page load
   setTimeout(() => {
     const jd = extractJobDescription();
@@ -283,7 +358,22 @@
       });
       console.log('ResAid: Job description detected');
     }
+
+    // Auto-fill common fields after a short delay
+    setTimeout(() => {
+      autoFillCommonFields();
+    }, 1500);
   }, 1000);
+
+  // Also watch for new fields added dynamically (SPA sites like Workday)
+  const observer = new MutationObserver(() => {
+    autoFillCommonFields();
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
 
   // Listen for messages from popup/background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -298,6 +388,11 @@
       } else {
         sendResponse({ success: false, error: 'No active field' });
       }
+    }
+
+    if (message.type === 'TRIGGER_AUTOFILL') {
+      autoFillCommonFields();
+      sendResponse({ success: true });
     }
     
     return true;
