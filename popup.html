@@ -138,6 +138,105 @@
       cursor: pointer;
       text-decoration: underline;
     }
+
+    /* Fit Score Meter */
+    .fit-score-container {
+      display: none;
+      text-align: center;
+      padding: 20px 0;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    .fit-score-container.visible {
+      display: block;
+    }
+
+    .score-label {
+      font-size: 12px;
+      color: #666;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+
+    .radial-chart {
+      position: relative;
+      width: 160px;
+      height: 160px;
+      margin: 0 auto 10px;
+    }
+
+    .radial-chart svg {
+      transform: rotate(-90deg);
+    }
+
+    .score-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    .score-value {
+      font-size: 42px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .score-subtitle {
+      font-size: 11px;
+      color: #999;
+      margin-top: -5px;
+    }
+
+    .score-breakdown {
+      margin-top: 12px;
+      padding: 12px;
+      background: white;
+      border-radius: 8px;
+      font-size: 11px;
+    }
+
+    .breakdown-item {
+      display: flex;
+      justify-content: space-between;
+      margin: 6px 0;
+      padding: 4px 0;
+    }
+
+    .breakdown-label {
+      color: #666;
+    }
+
+    .breakdown-value {
+      font-weight: 600;
+      color: #667eea;
+    }
+
+    .score-insights {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #666;
+      line-height: 1.5;
+    }
+
+    .insight-item {
+      margin: 4px 0;
+      padding: 4px 8px;
+      background: #fff;
+      border-radius: 4px;
+      border-left: 3px solid #667eea;
+    }
+
+    .insight-missing {
+      border-left-color: #f44336;
+    }
   </style>
 </head>
 <body>
@@ -153,8 +252,53 @@
       <div id="jobStatus" class="status warning">
         Not detected on this page
       </div>
-      <div id="jobPreview" class="job-preview" style="display:none;"></div>
-      <button id="refreshJob" class="small-btn">Refresh Detection</button>
+      <button id="refreshJobBtn" style="margin-top: 10px; display: none;">🔄 Refresh Detection</button>
+    </div>
+
+    <!-- Fit Score Meter -->
+    <div id="fitScoreContainer" class="fit-score-container">
+      <div class="score-label">Resume-Job Fit</div>
+      
+      <div class="radial-chart">
+        <svg width="160" height="160">
+          <!-- Background circle -->
+          <circle cx="80" cy="80" r="70" fill="none" stroke="#e0e0e0" stroke-width="12"/>
+          <!-- Progress circle -->
+          <circle id="scoreCircle" cx="80" cy="80" r="70" fill="none" 
+                  stroke="url(#gradient)" stroke-width="12" 
+                  stroke-dasharray="440" stroke-dashoffset="440"
+                  stroke-linecap="round"/>
+          <!-- Gradient definition -->
+          <defs>
+            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+            </linearGradient>
+          </defs>
+        </svg>
+        
+        <div class="score-text">
+          <div id="scoreValue" class="score-value">--</div>
+          <div class="score-subtitle">Match</div>
+        </div>
+      </div>
+
+      <div class="score-breakdown">
+        <div class="breakdown-item">
+          <span class="breakdown-label">Skills Match</span>
+          <span id="skillsScore" class="breakdown-value">--</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Experience</span>
+          <span id="expScore" class="breakdown-value">--</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Role Alignment</span>
+          <span id="roleScore" class="breakdown-value">--</span>
+        </div>
+      </div>
+
+      <div id="scoreInsights" class="score-insights"></div>
     </div>
     
     <!-- Resume Selection -->
@@ -173,7 +317,7 @@
     
     <!-- Action -->
     <div class="section">
-      <button id="enableAutofill">Enable Smart Autofill</button>
+      <button id="enableAutofill">Smart Autofill</button>
     </div>
     
     <div class="settings-link" id="settingsLink">⚙️ Extension Settings</div>

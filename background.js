@@ -20,6 +20,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         timestamp: Date.now()
       }
     });
+
+    // Also store last detected globally for carry-over across tabs
+    try {
+      const host = (() => {
+        try {
+          const u = new URL(sender.tab.url || '');
+          return u.host || '';
+        } catch (_) {
+          return '';
+        }
+      })();
+
+      // Only persist globally if it looks like a real job description
+      const text = (message.data.text || '').trim();
+      const hasKeywords = ['responsibilities','requirements','qualifications','experience','skills','role','position']
+        .some(kw => text.toLowerCase().includes(kw));
+      const looksValid = hasKeywords && text.length >= 300 || text.length >= 800;
+      if (!looksValid) {
+        sendResponse({ success: true });
+        return;
+      }
+
+      chrome.storage.session.set({
+        jobDescription_last: {
+          text: message.data.text,
+          url: sender.tab.url,
+          host,
+          timestamp: Date.now()
+        }
+      });
+    } catch (e) {
+      // ignore
+    }
     sendResponse({ success: true });
   }
 
@@ -49,15 +82,90 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'GET_PERSONAL_INFO') {
     chrome.storage.sync.get([
-      'fullName', 
+      'fullName',
+      'firstName',
+      'lastName', 
       'email', 
-      'phone', 
+      'phone',
+      'countryPhoneCode',
+      'extension',
+      'city',
+      'postalCode',
+      'location',
+      'addressLine2',
+      'country',
+      'province', 
       'linkedin', 
-      'location', 
       'currentCompany'
     ], (result) => {
       sendResponse({ success: true, data: result });
     });
+    return true;
+  }
+
+  if (message.type === 'GET_FALLBACK_CONTEXT') {
+    chrome.storage.sync.get([
+      'lastResumeId',
+      'guidelines'
+    ], (result) => {
+      sendResponse({ success: true, data: result });
+    });
+    return true;
+  }
+
+  if (message.type === 'SET_SMART_AUTOFILL') {
+    const tabId = sender.tab?.id;
+    if (tabId) {
+      chrome.storage.session.set({ [`smartAutofill_${tabId}`]: !!message.enabled });
+    }
+    sendResponse({ success: true });
+    return true;
+  }
+
+  if (message.type === 'GET_SMART_AUTOFILL') {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResponse({ success: true, enabled: false });
+      return true;
+    }
+    chrome.storage.session.get([`smartAutofill_${tabId}`], (result) => {
+      sendResponse({ success: true, enabled: !!result[`smartAutofill_${tabId}`] });
+    });
+    return true;
+  }
+
+  if (message.type === 'GET_LAST_JOB_DESCRIPTION') {
+    chrome.storage.session.get(['jobDescription_last'], (result) => {
+      sendResponse({ success: true, data: result.jobDescription_last || null });
+    });
+    return true;
+  }
+
+  if (message.type === 'CALCULATE_FIT_SCORE') {
+    // Calculate fit score using scoring algorithm
+    (async () => {
+      try {
+        const { jobDescription, resumeData } = message.data;
+        
+        // Import scoring functions from content.js context (send to active tab)
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tabs[0]) {
+          sendResponse({ success: false, error: 'No active tab' });
+          return;
+        }
+
+        // Execute scoring in content script context where functions exist
+        const result = await chrome.tabs.sendMessage(tabs[0].id, {
+          type: 'SCORE_RESUME_JOB_MATCH',
+          data: { jobDescription, resumeData }
+        });
+
+        sendResponse(result);
+      } catch (err) {
+        console.error('Error calculating fit score:', err);
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
     return true;
   }
 });

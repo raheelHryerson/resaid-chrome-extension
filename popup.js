@@ -1,9 +1,90 @@
 // Popup script - UI logic for the extension popup
 
+// Animate radial score meter
+function animateScoreMeter(score) {
+  const circle = document.getElementById('scoreCircle');
+  const scoreValue = document.getElementById('scoreValue');
+  const container = document.getElementById('fitScoreContainer');
+  
+  // Show container
+  container.classList.add('visible');
+  
+  // Calculate circle progress (440 is circumference: 2 * π * 70)
+  const circumference = 440;
+  const progress = circumference - (score / 100) * circumference;
+  
+  // Animate from 0 to score
+  let current = 0;
+  const duration = 1500; // 1.5 seconds
+  const startTime = Date.now();
+  
+  function update() {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Easing function (ease-out-cubic)
+    const eased = 1 - Math.pow(1 - progress, 3);
+    current = Math.round(score * eased);
+    
+    // Update circle
+    const offset = circumference - (current / 100) * circumference;
+    circle.style.strokeDashoffset = offset;
+    
+    // Update text
+    scoreValue.textContent = current + '%';
+    
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    }
+  }
+  
+  update();
+}
+
+// Display score breakdown and insights
+function displayScoreBreakdown(scoreData) {
+  if (!scoreData) return;
+  
+  // Update component scores
+  document.getElementById('skillsScore').textContent = scoreData.scoreComponents.skillsMatch + '%';
+  document.getElementById('expScore').textContent = scoreData.scoreComponents.experienceRelevance + '%';
+  document.getElementById('roleScore').textContent = scoreData.scoreComponents.roleAlignment + '%';
+  
+  // Display insights
+  const insightsContainer = document.getElementById('scoreInsights');
+  insightsContainer.innerHTML = '';
+  
+  // Strengths
+  if (scoreData.strengths && scoreData.strengths.length > 0) {
+    scoreData.strengths.slice(0, 2).forEach(strength => {
+      const item = document.createElement('div');
+      item.className = 'insight-item';
+      item.innerHTML = `✓ ${strength}`;
+      insightsContainer.appendChild(item);
+    });
+  }
+  
+  // Missing skills
+  if (scoreData.missingSkills && scoreData.missingSkills.length > 0) {
+    const item = document.createElement('div');
+    item.className = 'insight-item insight-missing';
+    item.innerHTML = `⚠ Missing: ${scoreData.missingSkills.join(', ')}`;
+    insightsContainer.appendChild(item);
+  }
+  
+  // Recommendations
+  if (scoreData.recommendations && scoreData.recommendations.length > 0) {
+    const rec = scoreData.recommendations[0];
+    const item = document.createElement('div');
+    item.className = 'insight-item';
+    item.innerHTML = `💡 ${rec}`;
+    insightsContainer.appendChild(item);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const jobStatus = document.getElementById('jobStatus');
-  const jobPreview = document.getElementById('jobPreview');
-  const refreshJobBtn = document.getElementById('refreshJob');
+  const refreshJobBtn = document.getElementById('refreshJobBtn');
   const resumeSelect = document.getElementById('resumeSelect');
   const guidelinesInput = document.getElementById('guidelines');
   const enableBtn = document.getElementById('enableAutofill');
@@ -38,6 +119,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load job description from storage
   async function loadJobDescription() {
+    const url = currentTab?.url || '';
+    if (/^(chrome:|edge:|about:|chrome-extension:|devtools:|view-source:)/i.test(url)) {
+      jobStatus.className = 'status warning';
+      jobStatus.textContent = 'ℹ️ Open a job page (http/https) to detect the description';
+      return;
+    }
+
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'GET_JOB_DESCRIPTION',
@@ -47,9 +135,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (response.success && response.data) {
         jobDescription = response.data;
         jobStatus.className = 'status detected';
-        jobStatus.textContent = `✓ Job description detected (${jobDescription.text.length} chars)`;
-        jobPreview.style.display = 'block';
-        jobPreview.textContent = jobDescription.text.slice(0, 300) + '...';
+        jobStatus.innerHTML = `✓ Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
+        
+        // Log to console for debugging
+        console.log('ResAid: Job Description detected:', {
+          length: jobDescription.text?.length,
+          confidence: jobDescription.confidence,
+          preview: jobDescription.text?.substring(0, 200) + '...'
+        });
+        refreshJobBtn.style.display = 'none';
         return;
       }
     } catch (err) {
@@ -65,12 +159,34 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (contentResponse && contentResponse.success && contentResponse.data) {
         jobDescription = contentResponse.data;
         jobStatus.className = 'status detected';
-        jobStatus.textContent = `✓ Job description detected (${jobDescription.text.length} chars)`;
-        jobPreview.style.display = 'block';
-        jobPreview.textContent = jobDescription.text.slice(0, 300) + '...';
+        jobStatus.innerHTML = `✓ Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
+        
+        // Log to console for debugging
+        console.log('ResAid: Job Description detected:', {
+          length: jobDescription.text?.length,
+          confidence: jobDescription.confidence,
+          preview: jobDescription.text?.substring(0, 200) + '...'
+        });
+        refreshJobBtn.style.display = 'none';
       } else {
-        jobStatus.className = 'status warning';
-        jobStatus.textContent = 'ℹ️ No job description found on this page';
+        // Try global last-known JD (carry-over across tabs)
+        const last = await chrome.runtime.sendMessage({ type: 'GET_LAST_JOB_DESCRIPTION' });
+        if (last?.data?.text) {
+          jobDescription = last.data;
+          jobStatus.className = 'status detected';
+          jobStatus.innerHTML = `✓ Detected (carried over)`;
+          
+          // Log to console for debugging
+          console.log('ResAid: Job Description carried over:', {
+            length: jobDescription.text?.length,
+            preview: jobDescription.text?.substring(0, 200) + '...'
+          });
+          refreshJobBtn.style.display = 'none';
+        } else {
+          jobStatus.className = 'status warning';
+          jobStatus.textContent = 'ℹ️ No job description found on this page';
+          refreshJobBtn.style.display = 'block';
+        }
       }
     } catch (err) {
       // Content script not loaded - inject it
@@ -91,18 +207,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         if (retryResponse && retryResponse.success && retryResponse.data) {
           jobDescription = retryResponse.data;
+          const confidence = Math.round(retryResponse.data.confidence * 100);
           jobStatus.className = 'status detected';
-          jobStatus.textContent = `✓ Job description detected (${jobDescription.text.length} chars)`;
-          jobPreview.style.display = 'block';
-          jobPreview.textContent = jobDescription.text.slice(0, 300) + '...';
+          jobStatus.textContent = `✓ Detected (${confidence}% confidence)`;
+          console.log('Job Description:', {
+            length: retryResponse.data.text.length,
+            confidence: confidence + '%',
+            preview: retryResponse.data.text.slice(0, 200) + '...'
+          });
+          refreshJobBtn.style.display = 'none';
         } else {
           jobStatus.className = 'status warning';
           jobStatus.textContent = 'ℹ️ No job description found on this page';
+          refreshJobBtn.style.display = 'block';
         }
       } catch (injectErr) {
         console.error('Could not inject content script:', injectErr);
         jobStatus.className = 'status warning';
         jobStatus.textContent = '⚠️ Please refresh the page and try again';
+        refreshJobBtn.style.display = 'block';
       }
     }
   }
@@ -120,7 +243,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       const response = await fetch(`${endpoint}/api/resumes`, { headers });
-      if (!response.ok) throw new Error('Failed to load resumes');
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Failed to load resumes (HTTP ${response.status}). ${body}`);
+      }
 
       const data = await response.json();
       const resumes = data.resumes || [];
@@ -143,11 +269,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         resumeSelect.appendChild(option);
       });
 
+      // Persist selected resume for fallback autofill
+      const selectedId = resumeSelect.value;
+      if (selectedId) {
+        await chrome.storage.sync.set({ lastResumeId: selectedId });
+      }
+
       enableBtn.disabled = false;
     } catch (err) {
       console.error('Error loading resumes:', err);
       resumeSelect.innerHTML = '<option value="">Error loading resumes</option>';
       enableBtn.disabled = true;
+
+      // Show actionable hint
+      jobStatus.className = 'status warning';
+      jobStatus.textContent = '⚠️ Could not load resumes. Check API key and endpoint in Settings, then reopen the popup.';
     }
   }
 
@@ -161,12 +297,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     setTimeout(async () => {
       await loadJobDescription();
-      refreshJobBtn.textContent = 'Refresh Detection';
+      refreshJobBtn.textContent = '🔄 Refresh Detection';
       refreshJobBtn.disabled = false;
     }, 2000);
   });
 
-  // Enable autofill
+  // Smart autofill - fill all common fields immediately
   enableBtn.addEventListener('click', async () => {
     const resumeId = resumeSelect.value;
     const guidelines = guidelinesInput.value.trim();
@@ -179,22 +315,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Save guidelines
     await chrome.storage.sync.set({ guidelines });
 
-    // Store context in session for this tab
-    await chrome.storage.session.set({
-      [`autofill_${currentTab.id}`]: {
-        resumeId,
-        guidelines,
-        jobDescription: jobDescription?.text || '',
-        enabled: true
-      }
-    });
+    enableBtn.textContent = '⏳ Filling...';
+    enableBtn.disabled = true;
 
-    enableBtn.textContent = '✓ Autofill Enabled!';
-    enableBtn.style.background = '#4CAF50';
+    try {
+      // Trigger immediate autofill of all common fields on the page
+      await chrome.tabs.sendMessage(currentTab.id, {
+        type: 'AUTOFILL_COMMON_FIELDS'
+      });
+
+      enableBtn.textContent = '✓ Done!';
+      enableBtn.style.background = '#4CAF50';
+    } catch (err) {
+      console.error('Error triggering autofill:', err);
+      enableBtn.textContent = 'Smart Autofill';
+      enableBtn.disabled = false;
+      alert('No personal info found. Go to Settings and add your info or click "Fetch from Resume".');
+    }
     
     setTimeout(() => {
       window.close();
     }, 1000);
+  });
+
+  // Keep selected resume saved for fallback autofill
+  resumeSelect.addEventListener('change', async () => {
+    const selectedId = resumeSelect.value;
+    if (selectedId) {
+      await chrome.storage.sync.set({ lastResumeId: selectedId });
+    }
+  });
+
+  // Save guidelines as user types (so fallback has them)
+  guidelinesInput.addEventListener('input', async () => {
+    await chrome.storage.sync.set({ guidelines: guidelinesInput.value.trim() });
   });
 
   // Settings
@@ -205,4 +359,73 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize
   await loadJobDescription();
   await loadResumes();
+
+  // Calculate fit score if both job description and resume are available
+  if (jobDescription && resumeSelect.value) {
+    await calculateFitScore();
+  }
+
+  // Recalculate when resume changes
+  resumeSelect.addEventListener('change', async () => {
+    const selectedId = resumeSelect.value;
+    if (selectedId) {
+      await chrome.storage.sync.set({ lastResumeId: selectedId });
+      if (jobDescription) {
+        calculateFitScore();
+      }
+    }
+  });
+
+  // Listen for job description detection from content script
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'JOB_DESCRIPTION_DETECTED' && sender.tab?.id === currentTab.id) {
+      jobDescription = message.data;
+      jobStatus.className = 'status detected';
+      jobStatus.innerHTML = `✓ Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
+      refreshJobBtn.style.display = 'none';
+      
+      // Auto-calculate score if resume is selected
+      if (resumeSelect.value) {
+        calculateFitScore();
+      }
+    }
+  });
+
+  // Calculate and display fit score
+  async function calculateFitScore() {
+    const resumeId = resumeSelect.value;
+    if (!resumeId || !jobDescription || !apiKey) return;
+
+    try {
+      // Get resume data
+      const response = await fetch(`${apiEndpoint}/api/user/profile`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) return;
+
+      const resumeData = await response.json();
+
+      // Send to background to calculate score (content.js has the scoring function)
+      const scoreResult = await chrome.runtime.sendMessage({
+        type: 'CALCULATE_FIT_SCORE',
+        data: {
+          jobDescription: jobDescription.text,
+          resumeData: resumeData
+        }
+      });
+
+      if (scoreResult && scoreResult.success && scoreResult.data) {
+        // Animate and display score
+        animateScoreMeter(scoreResult.data.overallScore);
+        displayScoreBreakdown(scoreResult.data);
+      }
+    } catch (err) {
+      console.error('Error calculating fit score:', err);
+    }
+  }
 });
