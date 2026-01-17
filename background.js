@@ -150,6 +150,78 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'LOAD_RESUME_DATA') {
+    (async () => {
+      try {
+        // First try to get from local storage (cached)
+        const cached = await chrome.storage.local.get(['resumeText', 'resumeLastUpdated']);
+        const now = Date.now();
+        const oneHour = 60 * 60 * 1000; // 1 hour in milliseconds
+
+        // If we have cached data less than 1 hour old, use it
+        if (cached.resumeText && cached.resumeLastUpdated && (now - cached.resumeLastUpdated) < oneHour) {
+          console.log('ResAid: Using cached resume data');
+          sendResponse({ success: true, data: cached.resumeText });
+          return;
+        }
+
+        // Otherwise, try to fetch from API
+        const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+        console.log('ResAid: API settings - endpoint:', settings.apiEndpoint, 'hasApiKey:', !!settings.apiKey);
+
+        if (settings.apiEndpoint && settings.apiKey) {
+          console.log('ResAid: Fetching resume from API:', `${settings.apiEndpoint}/api/user/resume`);
+
+          const response = await fetch(`${settings.apiEndpoint}/api/user/resume`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${settings.apiKey}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          console.log('ResAid: API response status:', response.status);
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log('ResAid: API response data keys:', Object.keys(data));
+
+            const resumeText = data.parsedData ? JSON.stringify(data.parsedData) : (data.content || '');
+
+            // Cache the resume data
+            await chrome.storage.local.set({
+              resumeText: resumeText,
+              resumeLastUpdated: now
+            });
+
+            console.log('ResAid: Resume data loaded and cached, length:', resumeText.length);
+            sendResponse({ success: true, data: resumeText });
+          } else {
+            const errorText = await response.text();
+            console.error('ResAid: API error response:', response.status, errorText);
+            sendResponse({ success: false, error: `API error: ${response.status} ${errorText}` });
+          }
+        } else {
+          console.log('ResAid: Missing API settings - endpoint:', !!settings.apiEndpoint, 'apiKey:', !!settings.apiKey);
+          sendResponse({ success: false, error: 'Missing API settings' });
+        }
+
+        // Fallback to cached data if API fails
+        if (cached.resumeText) {
+          console.log('ResAid: Using cached resume data (API failed)');
+          sendResponse({ success: true, data: cached.resumeText });
+        } else {
+          sendResponse({ success: false, error: 'No cached data available' });
+        }
+
+      } catch (err) {
+        console.error('ResAid: Error loading resume data:', err);
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
   if (message.type === 'SAVE_APPLICATION') {
     // Save application to local storage for tracker
     chrome.storage.local.get(['applications'], (result) => {
@@ -199,77 +271,161 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
     return true;
   }
+
+  if (message.type === 'SYNC_RESUMES') {
+    (async () => {
+      try {
+        const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+        if (!settings.apiEndpoint || !settings.apiKey) {
+          sendResponse({ success: false, error: 'API not configured' });
+          return;
+        }
+
+        console.log('Syncing resumes from API...');
+
+        const response = await fetch(`${settings.apiEndpoint}/api/user/resumes`, {
+          headers: {
+            'Authorization': `Bearer ${settings.apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          sendResponse({ success: false, error: `API error: ${response.status}` });
+          return;
+        }
+
+        const resumes = await response.json();
+
+        // Store resume data locally for AI use
+        if (resumes && resumes.length > 0) {
+          const latestResume = resumes[0]; // Use most recent resume
+          const resumeText = latestResume.parsedData ? JSON.stringify(latestResume.parsedData) : (latestResume.content || '');
+
+          await chrome.storage.local.set({
+            resumeText: resumeText,
+            resumeLastUpdated: Date.now(),
+            lastResumeId: latestResume.id
+          });
+
+          console.log('Resume data synced successfully');
+          sendResponse({ success: true, resumeCount: resumes.length });
+        } else {
+          sendResponse({ success: true, resumeCount: 0 });
+        }
+
+      } catch (err) {
+        console.error('Error syncing resumes:', err);
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    return true;
+  }
 });
 
 async function handleGenerateAnswer(data, tabId) {
   const { resumeId, question, jobDescription, guidelines } = data;
 
   try {
-    // Check if API is configured
-    const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+    // Get AI settings
+    const aiSettings = await chrome.storage.sync.get(['aiApiKey', 'aiModel', 'aiEnabled']);
     
-    if (settings.apiEndpoint && settings.apiKey && resumeId) {
-      // Use web app API for AI-powered answer generation
-      console.log('Using web app API for answer generation...');
-      
-      const response = await fetch(`${settings.apiEndpoint}/api/resumes/${resumeId}/answers`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${settings.apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          questions: [question], // API expects array of questions
-          jobDescription,
-          guidelines,
-          tone: 'neutral' // Default tone
-        })
-      });
+    if (!aiSettings.aiApiKey) {
+      throw new Error('OpenAI API key not configured');
+    }
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.answers && result.answers.length > 0) {
-          console.log('AI answer generated successfully');
-          return { 
-            answer: result.answers[0], // Take first answer since we sent one question
-            model: result.model || 'gpt-4',
-            source: 'api'
-          };
+    if (aiSettings.aiEnabled === false) {
+      throw new Error('AI question answering is disabled');
+    }
+
+    // Get resume data
+    let resumeText = '';
+    if (resumeId) {
+      // Try to get from local storage first
+      const cached = await chrome.storage.local.get(['resumeText']);
+      if (cached.resumeText) {
+        resumeText = cached.resumeText;
+      } else {
+        // Try to fetch from API if not cached
+        const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+        if (settings.apiEndpoint && settings.apiKey) {
+          try {
+            const response = await fetch(`${settings.apiEndpoint}/api/user/resume`, {
+              headers: {
+                'Authorization': `Bearer ${settings.apiKey}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            if (response.ok) {
+              const data = await response.json();
+              resumeText = data.parsedData ? JSON.stringify(data.parsedData) : (data.content || '');
+              
+              // Cache for future use
+              await chrome.storage.local.set({
+                resumeText: resumeText,
+                resumeLastUpdated: Date.now()
+              });
+            }
+          } catch (err) {
+            console.log('Failed to fetch resume from API:', err);
+          }
         }
       }
-      
-      console.log('API call failed, falling back to local generation');
     }
-  } catch (apiError) {
-    console.log('API error, falling back to local generation:', apiError);
+
+    // Log the full resumeText and jobDescription for inspection
+    console.log('ResAid: Full Resume Text:', resumeText);
+    console.log('ResAid: Full Job Description:', jobDescription);
+
+    const prompt = `You are a professional Resume writer. Answer this question based on their resume and the job description provided. Keep your answer professional, concise, and relevant to the job application context."
+
+Question: ${question}
+
+${resumeText ? `Resume: ${resumeText.substring(0, 6000)}` : ''}
+
+${jobDescription ? `Job Description: ${jobDescription.substring(0, 10000)}` : ''}
+
+${guidelines ? `Additional Guidelines: ${guidelines}` : ''}
+
+Answer the question directly and naturally, as if the applicant is writing it themselves. Keep it between 150 and 250 words.  Aim for clarity, relevance and impact; use as many words as needed to fully answer the competency prompt but stop short of the maximum unless every sentence adds value`;
+
+    const apiUrl = 'https://api.openai.com/v1/chat/completions';
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${aiSettings.aiApiKey}`
+    };
+    const body = JSON.stringify({
+      model: aiSettings.aiModel || 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 300,
+      temperature: 0.7
+    });
+
+    console.log('Calling OpenAI API for question:', question.substring(0, 50) + '...');
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: headers,
+      body: body
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenAI API error: ${response.status} ${error}`);
+    }
+
+    const result = await response.json();
+    const answer = result.choices?.[0]?.message?.content || '';
+
+    console.log('OpenAI answer generated successfully');
+    return { 
+      answer: answer.trim(),
+      model: aiSettings.aiModel || 'gpt-4o-mini',
+      source: 'openai'
+    };
+
+  } catch (error) {
+    console.error('Error generating answer:', error);
+    throw error;
   }
-
-  // Fallback: Local heuristic-based answer generation using stored profile data
-  console.log('Using local answer generation...');
-  const profile = await chrome.storage.sync.get([
-    'fullName','firstName','lastName','email','phone','city','country','linkedin',
-    'expectedSalary','yearsExperience','currentCompany','willingRelocate','workAuthorization','noticePeriod'
-  ]);
-
-  const name = profile.fullName || [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'I';
-  const years = profile.yearsExperience ? `${profile.yearsExperience} years` : null;
-  const company = profile.currentCompany || null;
-  const relocate = profile.willingRelocate ? 'I am open to relocation' : '';
-  const auth = profile.workAuthorization ? `Work authorization: ${profile.workAuthorization}.` : '';
-
-  const jdSynopsis = (jobDescription || '').slice(0, 280).replace(/\s+/g, ' ').trim();
-  const keepShort = (guidelines || '').toLowerCase().includes('under 200 words');
-
-  const intro = `Hello, my name is ${name}.`;
-  const exp = years ? ` I have ${years} of experience` : '';
-  const curr = company ? `, most recently at ${company}.` : '.';
-  const role = jdSynopsis ? ` I reviewed the role and its requirements: ${jdSynopsis}` : '';
-  const close = ` ${relocate} ${auth}`.trim();
-
-  let answerText = `${intro}${exp}${curr}${role} ${question ? `Here's my response: ${question}` : ''}`.trim();
-  if (keepShort && answerText.length > 900) {
-    answerText = answerText.slice(0, 900) + '...';
-  }
-
-  return { answer: answerText, model: 'local-heuristic', source: 'local' };
 }

@@ -45,9 +45,9 @@
   // Field patterns for instant autofill
   const FIELD_PATTERNS = {
     // Order matters: more specific patterns BEFORE broader ones
-    firstName: ['firstname', 'first_name', 'fname', 'givenname', 'legalname--firstname', 'first name'],
+    firstName: ['firstname', 'first_name', 'fname', 'givenname', 'legalname--firstname', 'first name', 'first-name', 'given_name', 'given-name', 'forename', 'first', 'name_first', 'firstName', 'first-name-input', 'input-firstname', 'first_name_field'],
     middleName: ['middlename', 'middle_name', 'mname', 'middlename', 'middle name'],
-    lastName: ['lastname', 'last_name', 'lname', 'surname', 'familyname', 'legalname--lastname', 'last name'],
+    lastName: ['lastname', 'last_name', 'lname', 'surname', 'familyname', 'legalname--lastname', 'last name', 'last-name', 'family_name', 'family-name', 'surname_field', 'lastName', 'last-name-input', 'input-lastname', 'last_name_field'],
     fullName: ['full name', 'fullname', 'full_name', 'applicantname', 'candidatename', 'legal name', 'legalname', 'your name'],
     email: ['email', 'e-mail', 'emailaddress', 'mail', 'email address'],
     // Put extension and country code before phone so "phoneNumber--extension" maps correctly
@@ -982,13 +982,20 @@
 
   // Inject answer into field
   function fillField(field, answer) {
+    console.log('ResAid: fillField called with answer:', answer, 'for field:', field.name || field.id || field.placeholder || field.tagName);
+    
     if (field.tagName === 'TEXTAREA' || field.tagName === 'INPUT') {
       field.value = answer;
       field.dispatchEvent(new Event('input', { bubbles: true }));
       field.dispatchEvent(new Event('change', { bubbles: true }));
-    } else if (field.contentEditable === 'true' || field.getAttribute('contenteditable') === 'true') {
+      console.log('ResAid: Set field value to:', field.value);
+    } else if (field.contentEditable === 'true' || field.getAttribute('contenteditable') === 'true' || 
+               field.getAttribute('role') === 'textbox' || field.tagName === 'DIV' || field.tagName === 'SPAN') {
       field.innerText = answer;
+      field.textContent = answer;
       field.dispatchEvent(new Event('input', { bubbles: true }));
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+      console.log('ResAid: Set contentEditable/textbox text to:', field.innerText);
     }
     
     // Highlight briefly
@@ -1171,6 +1178,100 @@
     }, { once: true });
   }
 
+  // Extract question text from field attributes
+  function extractQuestionFromAttributes(attributes) {
+    // Split by spaces and find the longest contiguous sequence that looks like a question
+    const words = attributes.split(' ');
+    let bestQuestion = '';
+    let currentQuestion = '';
+
+    for (const word of words) {
+      if (word.includes('?') || /\b(what|how|why|describe|explain|tell|please|can)\b/i.test(word)) {
+        currentQuestion += (currentQuestion ? ' ' : '') + word;
+      } else if (currentQuestion) {
+        // Continue building if we have a question started
+        const lowerWord = word.toLowerCase();
+        if (lowerWord.length > 2 && !['the', 'and', 'for', 'are', 'but', 'not', 'you', 'your', 'with', 'this', 'that', 'from', 'they', 'will', 'have', 'been', 'were'].includes(lowerWord)) {
+          currentQuestion += ' ' + word;
+        } else {
+          // End current question if we hit a stop word
+          if (currentQuestion.length > bestQuestion.length) {
+            bestQuestion = currentQuestion;
+          }
+          currentQuestion = '';
+        }
+      }
+    }
+
+    // Check the last question
+    if (currentQuestion.length > bestQuestion.length) {
+      bestQuestion = currentQuestion;
+    }
+
+    // Clean up the question
+    return bestQuestion.replace(/^[^\w]+|[^\w]+$/g, '').trim();
+  }
+
+  // AI API calling function for answering custom questions
+  async function answerQuestionWithAI(question, settings, resumeText, jobDescription) {
+    if (!settings.aiApiKey) {
+      console.log('ResAid: AI API key missing');
+      return null;
+    }
+
+    // Log the full resumeText and jobDescription for inspection
+    console.log('ResAid: Full Resume Text:', resumeText);
+    console.log('ResAid: Full Job Description:', jobDescription);
+
+    const prompt = `You are helping someone fill out a job application. Answer this question based on their resume and the job description provided. Keep your answer professional, concise, and relevant to the job application context.
+
+Question: ${question}
+
+${resumeText ? `Resume Summary: ${resumeText.substring(0, 2000)}` : ''}
+
+${jobDescription ? `Job Description: ${jobDescription.substring(0, 2000)}` : ''}
+
+Answer the question directly and naturally, as if the applicant is writing it themselves. Keep it under 250 words and focus on relevant experience and skills.`;
+
+    try {
+      const apiUrl = 'https://api.openai.com/v1/chat/completions';
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${settings.aiApiKey}`
+      };
+      const body = JSON.stringify({
+        model: settings.aiModel || 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 300,
+        temperature: 0.7
+      });
+
+      console.log('ResAid: Calling OpenAI API for question:', question.substring(0, 50) + '...');
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: headers,
+        body: body
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.log('ResAid: OpenAI API error:', response.status, error);
+        return null;
+      }
+
+      const data = await response.json();
+      const answer = data.choices?.[0]?.message?.content || '';
+
+      console.log('ResAid: AI generated answer:', answer.substring(0, 100) + '...');
+      return answer.trim();
+
+    } catch (err) {
+      console.log('ResAid: AI call failed:', err.message);
+      return null;
+    }
+  }
+
   // Detect field type based on attributes
   function detectFieldType(field) {
     // Collect all possible text sources
@@ -1183,7 +1284,17 @@
       field.getAttribute('data-qa'),
       field.className,
       field.getAttribute('data-testid'),
-      field.getAttribute('data-input')
+      field.getAttribute('data-input'),
+      field.getAttribute('data-field'),
+      field.getAttribute('data-name'),
+      field.getAttribute('data-label'),
+      field.getAttribute('data-cy'),
+      field.getAttribute('data-e2e'),
+      field.getAttribute('data-test'),
+      field.getAttribute('data-testid'),
+      field.getAttribute('aria-describedby'),
+      field.getAttribute('title'),
+      field.getAttribute('alt')
     ];
 
     // Check aria-labelledby
@@ -1194,6 +1305,18 @@
         const labelElement = document.getElementById(id);
         if (labelElement) {
           textSources.push(labelElement.textContent || labelElement.innerText);
+        }
+      }
+    }
+
+    // Check aria-describedby
+    const ariaDescribedBy = field.getAttribute('aria-describedby');
+    if (ariaDescribedBy) {
+      const ids = ariaDescribedBy.split(/\s+/);
+      for (const id of ids) {
+        const descElement = document.getElementById(id);
+        if (descElement) {
+          textSources.push(descElement.textContent || descElement.innerText);
         }
       }
     }
@@ -1235,12 +1358,24 @@
       }
     }
 
-    // Check for any nearby text elements (spans, labels, divs with text)
-    const nearbyElements = field.parentElement ? field.parentElement.querySelectorAll('span, label, div, p, h1, h2, h3, h4, h5, h6') : [];
+    // Check for any nearby text elements (spans, labels, divs with text) - expanded search
+    const nearbyElements = field.parentElement ? field.parentElement.querySelectorAll('span, label, div, p, h1, h2, h3, h4, h5, h6, strong, b, em, i') : [];
     for (const el of nearbyElements) {
       const elText = (el.textContent || el.innerText || '').trim();
       if (elText && elText.length < 100 && elText.length > 1 && !elText.includes('\n')) {
         textSources.push(elText);
+      }
+    }
+
+    // Check grandparent level for labels or text
+    if (field.parentElement && field.parentElement.parentElement) {
+      const grandparent = field.parentElement.parentElement;
+      const grandparentElements = grandparent.querySelectorAll('span, label, div, p, h1, h2, h3, h4, h5, h6');
+      for (const el of grandparentElements) {
+        const elText = (el.textContent || el.innerText || '').trim();
+        if (elText && elText.length < 100 && elText.length > 1 && !elText.includes('\n')) {
+          textSources.push(elText);
+        }
       }
     }
 
@@ -1250,8 +1385,43 @@
     // Try to match each field type with patterns
     for (const [fieldType, patterns] of Object.entries(FIELD_PATTERNS)) {
       for (const pattern of patterns) {
-        if (attributes.includes(pattern.toLowerCase())) {
+        const lowerPattern = pattern.toLowerCase();
+        if (attributes.includes(lowerPattern)) {
           return fieldType;
+        }
+      }
+    }
+
+    // Check for custom questions (AI-answered fields)
+    const questionPatterns = /\b(what|how|why|describe|explain|tell us|please|can you)\b.*\?/i;
+    const hasQuestionMark = attributes.includes('?');
+    const looksLikeQuestion = questionPatterns.test(attributes) || hasQuestionMark;
+
+    // Additional checks for question-like content
+    const questionIndicators = ['question', 'customquestion', 'additional', 'optional', 'tell us about', 'describe your', 'explain your'];
+    const hasQuestionIndicators = questionIndicators.some(indicator => attributes.toLowerCase().includes(indicator));
+
+    if ((looksLikeQuestion || hasQuestionIndicators) && attributes.length > 20) {
+      // Extract the question text from attributes
+      const questionText = extractQuestionFromAttributes(attributes);
+      if (questionText && questionText.length > 10) {
+        return 'customQuestion:' + questionText;
+      }
+    }
+
+    // Fallback: Check for common name patterns in any nearby text (broader search)
+    if (!field.name && !field.id && !field.getAttribute('aria-label') && !field.placeholder) {
+      // If field has no identifying attributes, do a broader search for labels
+      const broaderSearch = field.closest('div, form, fieldset');
+      if (broaderSearch) {
+        const allTextInContainer = broaderSearch.textContent || broaderSearch.innerText || '';
+        const lowerText = allTextInContainer.toLowerCase();
+        
+        if (lowerText.includes('first name') || lowerText.includes('given name') || lowerText.includes('legal first')) {
+          return 'firstName';
+        }
+        if (lowerText.includes('last name') || lowerText.includes('family name') || lowerText.includes('surname') || lowerText.includes('legal last')) {
+          return 'lastName';
         }
       }
     }
@@ -1290,32 +1460,68 @@
     }
 
     console.log('ResAid: Personal Info loaded:', personalInfo);
+    console.log('ResAid: firstName value:', personalInfo.firstName, 'type:', typeof personalInfo.firstName);
+
+    // Load resume data for AI question answering
+    const resumeResponse = await chrome.runtime.sendMessage({ type: 'LOAD_RESUME_DATA' });
+    const resumeText = resumeResponse.success ? resumeResponse.data : '';
+
+    // Log resume data for inspection
+    console.log('ResAid: Resume data loaded:', resumeText ? `Length: ${resumeText.length}, Preview: ${resumeText.substring(0, 200)}...` : 'No resume data');
+    if (resumeText) {
+      console.log('ResAid: Full resume text (first 6000 chars):', resumeText.substring(0, 6000));
+    }
 
     // Find all input fields on the page, including in shadow DOM
-    const fields = getAllElements('input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input:not([type]), textarea');
+    const fields = getAllElements('input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input:not([type]), textarea, [contenteditable="true"], div[role="textbox"], span[role="textbox"]');
     
-    console.log('ResAid: Found', fields.length, 'input fields');
-    
+    console.log('ResAid: Found', fields.length, 'potential input fields');
     let filled = 0;
     for (const field of fields) {
       // Skip if already filled
-      if (field.value && field.value.trim().length > 0) {
-        console.log('ResAid: Skipping already-filled field:', field.name || field.id);
+      const isContentEditable = field.contentEditable === 'true' || field.getAttribute('contenteditable') === 'true';
+      const hasValue = field.value && field.value.trim().length > 0;
+      const hasTextContent = (field.innerText || field.textContent || '').trim().length > 0;
+      
+      if ((hasValue && !isContentEditable) || (isContentEditable && hasTextContent)) {
+        console.log('ResAid: Skipping already-filled field:', field.name || field.id || field.tagName);
         continue;
       }
 
       const fieldType = detectFieldType(field);
-      console.log('ResAid: Field', field.name || field.id, '-> type:', fieldType);
-      
+      console.log('ResAid: Field', field.name || field.id || field.placeholder, '-> type:', fieldType);
+
       if (fieldType) {
         try {
+          // Handle custom questions with AI
+          if (fieldType.startsWith('customQuestion:')) {
+            const question = fieldType.substring('customQuestion:'.length);
+            console.log('ResAid: Detected custom question:', question);
+
+            // Get AI settings
+            const aiSettings = await chrome.storage.sync.get(['aiApiKey', 'aiModel', 'aiEnabled']);
+
+            if (aiSettings.aiApiKey && aiSettings.aiEnabled !== false) {
+              const jobDesc = detectedJobDescription?.text || '';
+
+              const aiAnswer = await answerQuestionWithAI(question, aiSettings, resumeText, jobDesc);
+              if (aiAnswer) {
+                fillField(field, aiAnswer);
+                filled++;
+                console.log('ResAid: AI answered custom question with:', aiAnswer.substring(0, 50) + '...');
+              } else {
+                console.log('ResAid: AI failed to answer question, skipping field');
+              }
+            } else {
+              console.log('ResAid: OpenAI API key not configured, skipping custom question');
+            }
+          }
           // Prefer explicit first/last if available; fall back to splitting fullName
-          if (fieldType === 'firstName') {
+          else if (fieldType === 'firstName') {
             const firstName = personalInfo.firstName || (personalInfo.fullName ? personalInfo.fullName.split(' ')[0] : '');
             if (firstName) {
               fillField(field, firstName);
               filled++;
-              console.log('ResAid: Filled firstName:', firstName);
             }
           } else if (fieldType === 'lastName') {
             const lastName = personalInfo.lastName || (() => {
@@ -1328,20 +1534,16 @@
             if (lastName) {
               fillField(field, lastName);
               filled++;
-              console.log('ResAid: Filled lastName:', lastName);
             }
           } else if (personalInfo[fieldType]) {
             fillField(field, personalInfo[fieldType]);
             filled++;
-            console.log('ResAid: Filled', fieldType, ':', personalInfo[fieldType]);
           }
         } catch (e) {
           console.log('ResAid: Error filling field:', e);
         }
       }
     }
-
-    console.log(`ResAid: Auto-filled ${filled} field(s)`);
   }
 
   // Auto-extract job description on page load (kept), but do NOT auto-fill
@@ -1509,6 +1711,8 @@
 
   // Listen for messages from popup/background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('ResAid: Content script received message:', message.type);
+    
     if (message.type === 'GET_PAGE_JOB_DESCRIPTION') {
       sendResponse({ success: true, data: detectedJobDescription });
     }
@@ -1523,11 +1727,13 @@
     }
 
     if (message.type === 'TRIGGER_AUTOFILL') {
+      console.log('ResAid: TRIGGER_AUTOFILL message received, calling autoFillCommonFields()');
       autoFillCommonFields();
       sendResponse({ success: true });
     }
     
     if (message.type === 'AUTOFILL_COMMON_FIELDS') {
+      console.log('ResAid: AUTOFILL_COMMON_FIELDS message received, calling autoFillCommonFields()');
       autoFillCommonFields();
       
       // Auto-save to application tracker
@@ -1934,7 +2140,31 @@
     }, 3000);
   }
   
-  // Initialize application tracking
-  initApplicationTracking();
+  // Manual field detection test (call from console)
+  window.testFieldDetection = function(selector) {
+    const field = selector ? document.querySelector(selector) : document.activeElement;
+    if (!field) {
+      console.log('ResAid: No field found');
+      return;
+    }
+    console.log('ResAid: Testing field detection for:', field);
+    const fieldType = detectFieldType(field);
+    console.log('ResAid: Detected field type:', fieldType);
+    return fieldType;
+  };
+
+  // Manual field filling test (call from console)
+  window.testFieldFill = function(selector, value) {
+    const field = selector ? document.querySelector(selector) : document.activeElement;
+    if (!field) {
+      console.log('ResAid: No field found');
+      return;
+    }
+    console.log('ResAid: Filling field with value:', value);
+    fillField(field, value);
+  };
+
+  // Store reference to detectFieldType for global access
+  window._resAidDetectFieldType = detectFieldType;
 
 })();

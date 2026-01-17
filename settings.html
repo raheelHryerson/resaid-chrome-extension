@@ -182,6 +182,28 @@
     <label for="referral" style="margin-top: 12px;">Referral Source</label>
     <input type="text" id="referral" placeholder="LinkedIn, Indeed, Company website" />
   </div>
+
+  <div class="section">
+    <h2 style="margin-top: 0; margin-bottom: 16px;">🤖 AI Configuration</h2>
+    <p class="help" style="margin-bottom: 16px;">
+      AI automatically answers custom questions in job applications using your resume and the job description.
+    </p>
+
+    <label for="aiApiKey">OpenAI API Key</label>
+    <input type="password" id="aiApiKey" placeholder="sk-..." />
+    <p class="help">Your OpenAI API key for question answering</p>
+
+    <label for="aiModel" style="margin-top: 12px;">AI Model</label>
+    <select id="aiModel" style="width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid #ddd; border-radius: 4px;">
+      <option value="gpt-4o-mini">GPT-4o Mini (fast & cheap)</option>
+      <option value="gpt-4o">GPT-4o (balanced)</option>
+      <option value="gpt-4-turbo">GPT-4 Turbo</option>
+    </select>
+
+    <button id="testAIConnectionBtn" style="margin-top: 12px; padding: 8px 16px; background: #FF9800;">
+      🧪 Test AI Connection
+    </button>
+  </div>
   
   <button id="saveBtn">Save Settings</button>
   

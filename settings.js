@@ -35,6 +35,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const getApiKeyBtn = document.getElementById('getApiKeyBtn');
   const syncResumesBtn = document.getElementById('syncResumesBtn');
 
+  // AI settings elements
+  const aiApiKeyInput = document.getElementById('aiApiKey');
+  const aiModelInput = document.getElementById('aiModel');
+  const testAIConnectionBtn = document.getElementById('testAIConnectionBtn');
+
   // Load existing settings
   const settings = await chrome.storage.sync.get([
     'fullName',
@@ -62,7 +67,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     'workAuth',
     'referral',
     'apiEndpoint',
-    'apiKey'
+    'apiKey',
+    'aiApiKey',
+    'aiModel'
   ]);
 
   // Load personal info
@@ -94,6 +101,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load API settings
   apiEndpointInput.value = settings.apiEndpoint || '';
   apiKeyInput.value = settings.apiKey || '';
+
+  // Load AI settings
+  aiApiKeyInput.value = settings.aiApiKey || '';
+  aiModelInput.value = settings.aiModel || 'gpt-4o-mini';
 
   // Get API Key button
   getApiKeyBtn.addEventListener('click', () => {
@@ -134,35 +145,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     syncResumesBtn.disabled = true;
 
     try {
-      const response = await fetch(`${apiEndpoint}/api/resumes`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        }
+      // Send message to background script to sync resumes
+      const response = await chrome.runtime.sendMessage({
+        type: 'SYNC_RESUMES'
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.resumes) {
-          // Store resumes locally
-          await chrome.storage.local.set({ resumes: data.resumes });
-
-          // Mark first resume as default if none marked
-          const resumes = data.resumes;
-          const hasDefault = resumes.some(r => r.isDefault);
-          if (!hasDefault && resumes.length > 0) {
-            resumes[0].isDefault = true;
-            await chrome.storage.local.set({ resumes });
-          }
-
-          status.className = 'status success';
-          status.textContent = `✓ Synced ${resumes.length} resume(s) from your account!`;
-        } else {
-          throw new Error('Invalid response format');
-        }
+      if (response.success) {
+        status.className = 'status success';
+        status.textContent = `✓ Synced resume data from your account! (${response.resumeCount} resume(s))`;
       } else {
-        throw new Error(`API returned ${response.status}`);
+        throw new Error(response.error || 'Unknown error');
       }
     } catch (error) {
       status.className = 'status';
@@ -284,6 +276,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Test AI Connection
+  testAIConnectionBtn.addEventListener('click', async () => {
+    const apiKey = aiApiKeyInput.value.trim();
+    const model = aiModelInput.value;
+
+    if (!apiKey) {
+      status.className = 'status error';
+      status.textContent = '❌ Please enter an OpenAI API key first';
+      status.style.display = 'block';
+      return;
+    }
+
+    testAIConnectionBtn.textContent = '🧪 Testing...';
+    testAIConnectionBtn.disabled = true;
+
+    try {
+      // Test with a simple question
+      const testQuestion = "What is 2+2?";
+      const response = await callAI('openai', apiKey, model, testQuestion, "", "");
+
+      if (response && response.includes("4")) {
+        status.className = 'status success';
+        status.textContent = '✅ AI connection successful! Ready to answer questions.';
+      } else {
+        status.className = 'status error';
+        status.textContent = '❌ AI responded but answer seems incorrect. Check your API key and model settings.';
+      }
+    } catch (err) {
+      status.className = 'status error';
+      status.textContent = '❌ AI connection failed: ' + err.message;
+    } finally {
+      testAIConnectionBtn.textContent = '🧪 Test AI Connection';
+      testAIConnectionBtn.disabled = false;
+      status.style.display = 'block';
+    }
+  });
+
   // Save settings
   saveBtn.addEventListener('click', async () => {
     await chrome.storage.sync.set({
@@ -312,7 +341,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       workAuth: workAuthInput.value.trim(),
       referral: referralInput.value.trim(),
       apiEndpoint: apiEndpointInput.value.trim(),
-      apiKey: apiKeyInput.value.trim()
+      apiKey: apiKeyInput.value.trim(),
+      aiApiKey: aiApiKeyInput.value.trim(),
+      aiModel: aiModelInput.value
     });
 
     status.className = 'status success';
@@ -322,4 +353,92 @@ document.addEventListener('DOMContentLoaded', async () => {
       status.style.display = 'none';
     }, 3000);
   });
+
+  // AI API calling function
+  async function callAI(provider, apiKey, model, question, resumeText, jobDescription) {
+    const prompt = `You are helping someone fill out a job application. Answer this question based on their resume and the job description provided. Keep your answer professional, concise, and relevant to the job application context.
+
+Question: ${question}
+
+${resumeText ? `Resume: ${resumeText}` : ''}
+
+${jobDescription ? `Job Description: ${jobDescription}` : ''}
+
+Answer the question directly and naturally, as if the applicant is writing it themselves. Keep it under 300 words.`;
+
+    let apiUrl, headers, body;
+
+    switch (provider) {
+      case 'openai':
+        apiUrl = 'https://api.openai.com/v1/chat/completions';
+        headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        };
+        body = JSON.stringify({
+          model: model,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 300,
+          temperature: 0.7
+        });
+        break;
+
+      case 'anthropic':
+        apiUrl = 'https://api.anthropic.com/v1/messages';
+        headers = {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        };
+        body = JSON.stringify({
+          model: model,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 300,
+          temperature: 0.7
+        });
+        break;
+
+      case 'google':
+        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        headers = {
+          'Content-Type': 'application/json'
+        };
+        body = JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            maxOutputTokens: 300,
+            temperature: 0.7
+          }
+        });
+        break;
+
+      default:
+        throw new Error('Unsupported AI provider');
+    }
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: headers,
+      body: body
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`API request failed: ${response.status} ${error}`);
+    }
+
+    const data = await response.json();
+
+    // Extract the response text based on provider
+    switch (provider) {
+      case 'openai':
+        return data.choices?.[0]?.message?.content || '';
+      case 'anthropic':
+        return data.content?.[0]?.text || '';
+      case 'google':
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      default:
+        return '';
+    }
+  }
 });

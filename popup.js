@@ -122,8 +122,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   const resumeSelect = document.getElementById('resumeSelect');
   const guidelinesInput = document.getElementById('guidelines');
   const enableBtn = document.getElementById('enableAutofill');
+  const syncProfileBtn = document.getElementById('syncProfileBtn');
+  const debugStorageBtn = document.getElementById('debugStorageBtn');
+  const testApiBtn = document.getElementById('testApiBtn');
   const settingsLink = document.getElementById('settingsLink');
   const openTrackerBtn = document.getElementById('openTrackerBtn');
+
+  // AI status elements
+  const aiStatus = document.getElementById('aiStatus');
+  const aiStatusText = document.getElementById('aiStatusText');
+  const aiToggle = document.getElementById('aiToggle');
 
   let currentTab = null;
   let jobDescription = null;
@@ -355,6 +363,172 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 2000);
   });
 
+  // Sync profile from account
+  syncProfileBtn.addEventListener('click', async () => {
+    console.log('ResAid: Starting profile sync...');
+    syncProfileBtn.textContent = '⏳ Syncing...';
+    syncProfileBtn.disabled = true;
+
+    try {
+      const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+      console.log('ResAid: Sync settings:', { hasEndpoint: !!settings.apiEndpoint, hasApiKey: !!settings.apiKey });
+
+      if (!settings.apiEndpoint || !settings.apiKey) {
+        alert('Please configure your API endpoint and key in Settings first.');
+        syncProfileBtn.textContent = '🔄 Sync Profile';
+        syncProfileBtn.disabled = false;
+        return;
+      }
+
+      console.log('ResAid: Fetching from API:', `${settings.apiEndpoint}/api/user/profile`);
+      const response = await fetch(`${settings.apiEndpoint}/api/user/profile`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${settings.apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('ResAid: API response status:', response.status);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('ResAid: API response data:', data);
+
+        if (data.success && data.profile) {
+          const profile = data.profile;
+          console.log('ResAid: Profile data received:', {
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            email: profile.email,
+            hasFirstName: !!profile.firstName
+          });
+
+          // Save to Chrome storage
+          await chrome.storage.sync.set({
+            fullName: profile.fullName || '',
+            firstName: profile.firstName || '',
+            middleName: profile.middleName || '',
+            lastName: profile.lastName || '',
+            email: profile.email || '',
+            phone: profile.phone || '',
+            countryPhoneCode: profile.countryPhoneCode || '',
+            extension: profile.extension || '',
+            city: profile.city || '',
+            postalCode: profile.postalCode || '',
+            location: profile.location || '',
+            addressLine2: profile.addressLine2 || '',
+            country: profile.country || '',
+            province: profile.province || '',
+            linkedin: profile.linkedin || '',
+            github: profile.github || '',
+            portfolio: profile.portfolio || '',
+            twitter: profile.twitter || '',
+            pronouns: profile.pronouns || '',
+            currentCompany: profile.currentCompany || '',
+            salary: profile.salary || '',
+            availability: profile.availability || '',
+            workAuth: profile.workAuth || '',
+            referral: profile.referral || ''
+          });
+
+          console.log('ResAid: Profile saved to Chrome storage');
+          
+          // Verify the data was saved correctly
+          const verifyData = await chrome.storage.sync.get(['firstName', 'lastName', 'email']);
+          console.log('ResAid: Verification - data in storage:', verifyData);
+          
+          syncProfileBtn.textContent = '✓ Synced!';
+          syncProfileBtn.style.background = '#4CAF50';
+
+          setTimeout(() => {
+            syncProfileBtn.textContent = '🔄 Sync Profile';
+            syncProfileBtn.style.background = '';
+            syncProfileBtn.disabled = false;
+          }, 2000);
+        } else {
+          console.error('ResAid: Invalid response format:', data);
+          throw new Error('Invalid response format');
+        }
+      } else {
+        const errorText = await response.text();
+        console.error('ResAid: API error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+    } catch (err) {
+      console.error('ResAid: Error syncing profile:', err);
+      alert('Failed to sync profile. Please check your settings and try again. Check console for details.');
+      syncProfileBtn.textContent = '🔄 Sync Profile';
+      syncProfileBtn.disabled = false;
+    }
+  });
+
+  // Debug storage - show what's currently in Chrome storage
+  debugStorageBtn.addEventListener('click', async () => {
+    try {
+      const storageData = await chrome.storage.sync.get([
+        'firstName', 'lastName', 'email', 'phone', 'fullName',
+        'apiEndpoint', 'apiKey'
+      ]);
+      
+      console.log('ResAid: Current Chrome storage data:', storageData);
+      alert(`Chrome Storage Data:\n\nfirstName: "${storageData.firstName || 'NOT SET'}"\nlastName: "${storageData.lastName || 'NOT SET'}"\nemail: "${storageData.email || 'NOT SET'}"\nphone: "${storageData.phone || 'NOT SET'}"\nfullName: "${storageData.fullName || 'NOT SET'}"\n\nAPI Endpoint: ${storageData.apiEndpoint ? 'SET' : 'NOT SET'}\nAPI Key: ${storageData.apiKey ? 'SET' : 'NOT SET'}\n\nCheck browser console for full details.`);
+    } catch (err) {
+      console.error('ResAid: Error reading storage:', err);
+      alert('Error reading storage. Check console.');
+    }
+  });
+
+  // Test API connection
+  testApiBtn.addEventListener('click', async () => {
+    testApiBtn.textContent = '⏳ Testing...';
+    testApiBtn.disabled = true;
+
+    try {
+      const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+      
+      if (!settings.apiEndpoint || !settings.apiKey) {
+        alert('API endpoint and key not configured. Go to Settings first.');
+        testApiBtn.textContent = '🔗 Test API';
+        testApiBtn.disabled = false;
+        return;
+      }
+
+      console.log('ResAid: Testing API connection to:', settings.apiEndpoint);
+      const response = await fetch(`${settings.apiEndpoint}/api/user/profile`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${settings.apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('ResAid: API test response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('ResAid: API test response:', data);
+        
+        if (data.success && data.profile) {
+          alert(`✅ API Connected!\n\nProfile data received:\n• firstName: "${data.profile.firstName || 'null'}"\n• lastName: "${data.profile.lastName || 'null'}"\n• email: "${data.profile.email || 'null'}"\n\nCheck console for full response.`);
+        } else {
+          alert(`❌ API responded but invalid format. Check console.`);
+        }
+      } else {
+        const errorText = await response.text();
+        console.error('ResAid: API test error:', errorText);
+        alert(`❌ API Error: ${response.status}\n${errorText}`);
+      }
+      
+      testApiBtn.textContent = '🔗 Test API';
+      testApiBtn.disabled = false;
+    } catch (err) {
+      console.error('ResAid: API test error:', err);
+      alert(`❌ Connection Error: ${err.message}`);
+      testApiBtn.textContent = '🔗 Test API';
+      testApiBtn.disabled = false;
+    }
+  });
+
   // Smart autofill - fill all common fields immediately
   enableBtn.addEventListener('click', async () => {
     const resumeId = resumeSelect.value;
@@ -372,10 +546,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     enableBtn.disabled = true;
 
     try {
+      console.log('ResAid: Sending AUTOFILL_COMMON_FIELDS to tab:', currentTab.id, currentTab.url);
       // Trigger immediate autofill of all common fields on the page
-      await chrome.tabs.sendMessage(currentTab.id, {
+      const response = await chrome.tabs.sendMessage(currentTab.id, {
         type: 'AUTOFILL_COMMON_FIELDS'
       });
+      console.log('ResAid: AUTOFILL_COMMON_FIELDS response:', response);
 
       enableBtn.textContent = '✓ Done!';
       enableBtn.style.background = '#4CAF50';
@@ -383,7 +559,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.error('Error triggering autofill:', err);
       enableBtn.textContent = 'Smart Autofill';
       enableBtn.disabled = false;
-      alert('No personal info found. Go to Settings and add your info or click "Fetch from Resume".');
+      alert('No personal info found. Click "Sync Profile" to load your latest data from your account, or go to Settings to add your info manually.');
     }
     
     setTimeout(() => {
@@ -409,9 +585,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.runtime.openOptionsPage();
   });
 
+  // AI toggle
+  aiToggle.addEventListener('change', async () => {
+    const isEnabled = aiToggle.checked;
+    await chrome.storage.sync.set({ aiEnabled: isEnabled });
+    console.log('ResAid: AI enabled state changed to:', isEnabled);
+  });
+
   // Initialize
   await loadJobDescription();
   await loadResumes();
+
+  // Load AI enabled state
+  const aiSettings = await chrome.storage.sync.get(['aiEnabled']);
+  aiToggle.checked = aiSettings.aiEnabled !== false; // Default to true if not set
 
   // Calculate fit score if both job description and resume are available
   if (jobDescription && resumeSelect.value) {
@@ -541,4 +728,39 @@ document.addEventListener('DOMContentLoaded', async () => {
       `;
     }
   }
+
+  // Check AI status and show in popup
+  async function checkAIStatus() {
+    try {
+      const aiSettings = await chrome.storage.sync.get(['enableAI', 'aiProvider', 'aiApiKey', 'aiModel']);
+      
+      if (aiStatus && aiStatusText) {
+        if (aiSettings.enableAI && aiSettings.aiApiKey) {
+          aiStatus.style.display = 'block';
+          aiStatus.style.background = '#e8f5e8';
+          aiStatus.style.border = '1px solid #4caf50';
+          aiStatus.style.color = '#2e7d32';
+          aiStatusText.textContent = `AI Question Answering: Enabled (${aiSettings.aiProvider || 'openai'})`;
+        } else if (aiSettings.enableAI && !aiSettings.aiApiKey) {
+          aiStatus.style.display = 'block';
+          aiStatus.style.background = '#fff3cd';
+          aiStatus.style.border = '1px solid #ffc107';
+          aiStatus.style.color = '#856404';
+          aiStatusText.textContent = 'AI Question Answering: Enabled but needs API key';
+        } else {
+          aiStatus.style.display = 'block';
+          aiStatus.style.background = '#f5f5f5';
+          aiStatus.style.border = '1px solid #ddd';
+          aiStatus.style.color = '#666';
+          aiStatusText.textContent = 'AI Question Answering: Disabled';
+        }
+      }
+    } catch (err) {
+      console.log('Error checking AI status:', err);
+      if (aiStatus) aiStatus.style.display = 'none';
+    }
+  }
+
+  // Initialize AI status check
+  checkAIStatus();
 });
