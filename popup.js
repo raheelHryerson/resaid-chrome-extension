@@ -258,14 +258,54 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Load resumes from local storage
+  // Load resumes from API or local storage
   async function loadResumes() {
     try {
-      const stored = await chrome.storage.local.get(['resumes']);
-      const resumes = stored.resumes || [];
+      // First try to load from API if configured
+      const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+      let resumes = [];
+
+      if (settings.apiEndpoint && settings.apiKey) {
+        try {
+          console.log('Fetching resumes from API...');
+          const response = await fetch(`${settings.apiEndpoint}/api/resumes`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${settings.apiKey}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.resumes) {
+              resumes = data.resumes;
+              console.log('Loaded resumes from API:', resumes.length);
+
+              // Store in local storage for offline use
+              await chrome.storage.local.set({ resumes });
+
+              // Mark the most recent resume as default if none is marked
+              const hasDefault = resumes.some(r => r.isDefault);
+              if (!hasDefault && resumes.length > 0) {
+                resumes[0].isDefault = true;
+              }
+            }
+          }
+        } catch (apiError) {
+          console.log('API fetch failed, falling back to local storage:', apiError);
+        }
+      }
+
+      // If no resumes from API, load from local storage
+      if (resumes.length === 0) {
+        const stored = await chrome.storage.local.get(['resumes']);
+        resumes = stored.resumes || [];
+        console.log('Loaded resumes from local storage:', resumes.length);
+      }
 
       resumeSelect.innerHTML = '';
-      
+
       if (resumes.length === 0) {
         resumeSelect.innerHTML = '<option value="">No resumes found</option>';
         enableBtn.disabled = true;
@@ -433,6 +473,72 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     } catch (err) {
       console.error('Error calculating fit score:', err);
+    }
+  }
+});
+
+// ===== APPLICATIONS TRACKER =====
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const toggleApplications = document.getElementById('toggleApplications');
+  const applicationsList = document.getElementById('applicationsList');
+  const applicationsContent = document.getElementById('applicationsContent');
+  const viewAllApplications = document.getElementById('viewAllApplications');
+  
+  let applicationsExpanded = false;
+  
+  // Toggle applications list
+  toggleApplications.addEventListener('click', () => {
+    applicationsExpanded = !applicationsExpanded;
+    applicationsList.style.display = applicationsExpanded ? 'block' : 'none';
+    toggleApplications.textContent = applicationsExpanded ? '▲' : '▼';
+    
+    if (applicationsExpanded) {
+      loadRecentApplications();
+    }
+  });
+  
+  // View all applications
+  viewAllApplications.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('applications.html') });
+  });
+  
+  // Load recent applications
+  async function loadRecentApplications() {
+    try {
+      const result = await chrome.storage.local.get(['applications']);
+      const applications = result.applications || [];
+      
+      if (applications.length === 0) {
+        applicationsContent.innerHTML = `
+          <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
+            No applications tracked yet.<br>
+            <small>Applications will be tracked automatically when you submit job applications.</small>
+          </div>
+        `;
+        return;
+      }
+      
+      // Show last 3 applications
+      const recentApps = applications.slice(-3).reverse();
+      
+      applicationsContent.innerHTML = recentApps.map(app => `
+        <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px; margin-bottom: 8px; background: #fafafa;">
+          <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${app.position || 'Unknown Position'}</div>
+          <div style="font-size: 14px; color: #666; margin-bottom: 4px;">${app.company || 'Unknown Company'}</div>
+          <div style="font-size: 12px; color: #888;">
+            ${app.status || 'Applied'} • ${new Date(app.dateAdded || app.appliedDate).toLocaleDateString()}
+          </div>
+        </div>
+      `).join('');
+      
+    } catch (error) {
+      console.error('Error loading applications:', error);
+      applicationsContent.innerHTML = `
+        <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
+          Error loading applications
+        </div>
+      `;
     }
   }
 });

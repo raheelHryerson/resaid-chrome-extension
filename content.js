@@ -45,21 +45,30 @@
   // Field patterns for instant autofill
   const FIELD_PATTERNS = {
     // Order matters: more specific patterns BEFORE broader ones
-    firstName: ['firstname', 'first_name', 'fname', 'givenname', 'legalname--firstname'],
-    lastName: ['lastname', 'last_name', 'lname', 'surname', 'familyname', 'legalname--lastname'],
+    firstName: ['firstname', 'first_name', 'fname', 'givenname', 'legalname--firstname', 'first name'],
+    middleName: ['middlename', 'middle_name', 'mname', 'middlename', 'middle name'],
+    lastName: ['lastname', 'last_name', 'lname', 'surname', 'familyname', 'legalname--lastname', 'last name'],
     fullName: ['full name', 'fullname', 'full_name', 'applicantname', 'candidatename', 'legal name', 'legalname', 'your name'],
-    email: ['email', 'e-mail', 'emailaddress', 'mail'],
+    email: ['email', 'e-mail', 'emailaddress', 'mail', 'email address'],
     // Put extension and country code before phone so "phoneNumber--extension" maps correctly
     extension: ['extension', 'ext', 'phone extension', 'ext number'],
     countryPhoneCode: ['country code', 'country phone code', 'phone country', 'intl code', 'countryphonecode'],
-    phone: ['phone', 'telephone', 'mobile', 'cell', 'phonenumber', 'contact'],
-    linkedin: ['linkedin', 'linkedinurl', 'linkedin_url', 'linkedinprofile'],
+    phone: ['phone', 'telephone', 'mobile', 'cell', 'phonenumber', 'contact', 'phone number'],
+    linkedin: ['linkedin', 'linkedinurl', 'linkedin_url', 'linkedinprofile', 'linkedin profile'],
+    github: ['github', 'githuburl', 'github_url', 'githubprofile', 'github profile'],
+    portfolio: ['portfolio', 'website', 'personal website', 'personal site', 'portfolio url', 'website url'],
+    twitter: ['twitter', 'twitterurl', 'twitter_url', 'twitterprofile', 'twitter profile'],
+    pronouns: ['pronouns', 'preferred pronouns', 'gender pronouns'],
     // Specific address fields BEFORE generic location
-    city: ['city', 'town'],
-    postalCode: ['postal', 'zip', 'zipcode', 'postcode', 'postalcode'],
+    city: ['city', 'town', 'city of residence'],
+    postalCode: ['postal', 'zip', 'zipcode', 'postcode', 'postalcode', 'zip code', 'postal code'],
     country: ['country', 'nation', 'countryregion', 'province', 'territory', 'region', 'state', 'provinceorterritory'],
-    location: ['addressline1', 'addressline2', 'address1', 'address2', 'address', 'street', 'location', 'residence', 'currentlocation'],
-    currentCompany: ['company', 'employer', 'organization', 'currentcompany', 'current_company']
+    location: ['addressline1', 'addressline2', 'address1', 'address2', 'address', 'street', 'location', 'residence', 'currentlocation', 'current location'],
+    currentCompany: ['company', 'employer', 'organization', 'currentcompany', 'current_company', 'current employer'],
+    salary: ['salary', 'salary expectation', 'expected salary', 'salary range', 'compensation'],
+    availability: ['availability', 'available date', 'start date', 'available to start', 'notice period'],
+    workAuth: ['work authorization', 'work auth', 'visa status', 'work permit', 'eligible to work'],
+    referral: ['referral', 'referred by', 'how did you hear', 'referral source']
   };
 
   // State
@@ -1164,15 +1173,79 @@
 
   // Detect field type based on attributes
   function detectFieldType(field) {
-    const attributes = [
+    // Collect all possible text sources
+    const textSources = [
       field.name,
       field.id,
       field.getAttribute('aria-label'),
       field.getAttribute('placeholder'),
       field.getAttribute('data-automation-id'),
       field.getAttribute('data-qa'),
-      field.className
-    ].filter(Boolean).join(' ').toLowerCase();
+      field.className,
+      field.getAttribute('data-testid'),
+      field.getAttribute('data-input')
+    ];
+
+    // Check aria-labelledby
+    const ariaLabelledBy = field.getAttribute('aria-labelledby');
+    if (ariaLabelledBy) {
+      const ids = ariaLabelledBy.split(/\s+/);
+      for (const id of ids) {
+        const labelElement = document.getElementById(id);
+        if (labelElement) {
+          textSources.push(labelElement.textContent || labelElement.innerText);
+        }
+      }
+    }
+
+    // Check associated label
+    if (field.id) {
+      const label = document.querySelector(`label[for="${field.id}"]`);
+      if (label) {
+        textSources.push(label.textContent || label.innerText);
+      }
+    }
+
+    // Check parent elements for data-testid or text content
+    let parent = field.parentElement;
+    let depth = 0;
+    while (parent && depth < 5) { // Check up to 5 levels up
+      if (parent.getAttribute('data-testid')) {
+        textSources.push(parent.getAttribute('data-testid'));
+      }
+      // If parent has text content and is likely a label container
+      const parentText = (parent.textContent || parent.innerText || '').trim();
+      if (parentText && parentText.length < 200 && !parentText.includes('\n')) {
+        textSources.push(parentText);
+      }
+      parent = parent.parentElement;
+      depth++;
+    }
+
+    // Check sibling elements for text content
+    if (field.parentElement) {
+      const siblings = field.parentElement.children;
+      for (const sibling of siblings) {
+        if (sibling !== field) {
+          const siblingText = (sibling.textContent || sibling.innerText || '').trim();
+          if (siblingText && siblingText.length < 100 && !siblingText.includes('\n')) {
+            textSources.push(siblingText);
+          }
+        }
+      }
+    }
+
+    // Check for any nearby text elements (spans, labels, divs with text)
+    const nearbyElements = field.parentElement ? field.parentElement.querySelectorAll('span, label, div, p, h1, h2, h3, h4, h5, h6') : [];
+    for (const el of nearbyElements) {
+      const elText = (el.textContent || el.innerText || '').trim();
+      if (elText && elText.length < 100 && elText.length > 1 && !elText.includes('\n')) {
+        textSources.push(elText);
+      }
+    }
+
+    // Join all sources and convert to lowercase
+    const attributes = textSources.filter(Boolean).join(' ').toLowerCase();
 
     // Try to match each field type with patterns
     for (const [fieldType, patterns] of Object.entries(FIELD_PATTERNS)) {
@@ -1186,6 +1259,28 @@
     return null;
   }
 
+  // Helper to get all elements including those in shadow DOM
+  function getAllElements(selector) {
+    const elements = [];
+    
+    function collectElements(root) {
+      // Add elements from current root
+      const found = root.querySelectorAll(selector);
+      elements.push(...found);
+      
+      // Recursively check shadow roots
+      const allElements = root.querySelectorAll('*');
+      for (const el of allElements) {
+        if (el.shadowRoot) {
+          collectElements(el.shadowRoot);
+        }
+      }
+    }
+    
+    collectElements(document);
+    return elements;
+  }
+
   // Auto-fill common fields
   async function autoFillCommonFields() {
     if (!personalInfo) {
@@ -1196,8 +1291,8 @@
 
     console.log('ResAid: Personal Info loaded:', personalInfo);
 
-    // Find all input fields on the page
-    const fields = document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input:not([type]), textarea');
+    // Find all input fields on the page, including in shadow DOM
+    const fields = getAllElements('input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input:not([type]), textarea');
     
     console.log('ResAid: Found', fields.length, 'input fields');
     
@@ -1280,6 +1375,13 @@
 
       // Calculate and show fit score automatically
       await calculateAndShowFitScore();
+    }
+
+    // Auto-fill common fields if smart autofill is enabled
+    const smartAutofillEnabled = await chrome.runtime.sendMessage({ type: 'GET_SMART_AUTOFILL' });
+    if (smartAutofillEnabled?.enabled) {
+      console.log('ResAid: Smart autofill enabled, auto-filling common fields...');
+      setTimeout(() => autoFillCommonFields(), 2000); // Wait a bit for dynamic content
     }
   }, 1000);
 
@@ -1468,5 +1570,371 @@
     
     return true;
   });
+
+  // ===== APPLICATION TRACKING SYSTEM =====
+  
+  // Detect potential job application pages and track submissions
+  function initApplicationTracking() {
+    // Only track on job-related pages
+    if (!isJobApplicationPage()) return;
+    
+    console.log('🎯 Application tracking enabled on:', window.location.href);
+    
+    // Track form submissions
+    trackFormSubmissions();
+    
+    // Track navigation to success pages
+    trackSuccessPages();
+    
+    // Track content changes for success messages
+    trackSuccessContent();
+  }
+  
+  // Check if current page is likely a job application
+  function isJobApplicationPage() {
+    const url = window.location.href.toLowerCase();
+    const title = document.title.toLowerCase();
+    const bodyText = document.body?.textContent?.toLowerCase() || '';
+    
+    // URL patterns
+    const jobUrlPatterns = [
+      /\/jobs?\//, /\/careers?\//, /\/apply\/?/, /\/application\/?/,
+      /greenhouse\.io/, /workday\.com/, /lever\.co/, /linkedin\.com\/jobs/,
+      /indeed\.com/, /glassdoor\.com/, /monster\.com/
+    ];
+    
+    // Title patterns
+    const jobTitlePatterns = [
+      /apply/i, /application/i, /job/i, /career/i, /position/i,
+      /hiring/i, /recruit/i, /opening/i
+    ];
+    
+    // Content patterns
+    const jobContentPatterns = [
+      /submit application/i, /apply now/i, /send application/i,
+      /job application/i, /application form/i
+    ];
+    
+    return jobUrlPatterns.some(pattern => pattern.test(url)) ||
+           jobTitlePatterns.some(pattern => pattern.test(title)) ||
+           jobContentPatterns.some(pattern => pattern.test(bodyText));
+  }
+  
+  // Track form submissions that might be job applications
+  function trackFormSubmissions() {
+    // Find all forms that look like job application forms
+    const forms = document.querySelectorAll('form');
+    
+    forms.forEach(form => {
+      // Check if form contains job application indicators
+      if (isJobApplicationForm(form)) {
+        form.addEventListener('submit', handleFormSubmission);
+        console.log('📋 Tracking form submission for potential job application');
+      }
+    });
+  }
+  
+  // Check if a form looks like a job application
+  function isJobApplicationForm(form) {
+    const formHTML = form.innerHTML.toLowerCase();
+    const formText = form.textContent?.toLowerCase() || '';
+    
+    const applicationIndicators = [
+      'submit application', 'apply now', 'send application',
+      'job application', 'application form', 'cover letter',
+      'resume', 'cv', 'work experience', 'education',
+      'phone', 'email', 'address', 'linkedin'
+    ];
+    
+    return applicationIndicators.some(indicator => 
+      formHTML.includes(indicator) || formText.includes(indicator)
+    );
+  }
+  
+  // Handle form submission
+  async function handleFormSubmission(event) {
+    console.log('📝 Form submitted - checking if job application...');
+    
+    // Wait a bit for any redirects or page changes
+    setTimeout(() => {
+      checkForApplicationSuccess();
+    }, 2000);
+  }
+  
+  // Track navigation to success/thank you pages
+  function trackSuccessPages() {
+    // Monitor URL changes
+    let currentUrl = window.location.href;
+    
+    const urlObserver = new MutationObserver(() => {
+      if (window.location.href !== currentUrl) {
+        currentUrl = window.location.href;
+        checkForApplicationSuccess();
+      }
+    });
+    
+    urlObserver.observe(document, { childList: true, subtree: true });
+    
+    // Also check periodically
+    setInterval(() => {
+      if (window.location.href !== currentUrl) {
+        currentUrl = window.location.href;
+        checkForApplicationSuccess();
+      }
+    }, 1000);
+  }
+  
+  // Track content changes for success messages
+  function trackSuccessContent() {
+    const contentObserver = new MutationObserver(() => {
+      checkForApplicationSuccess();
+    });
+    
+    contentObserver.observe(document.body, { 
+      childList: true, 
+      subtree: true,
+      characterData: true 
+    });
+  }
+  
+  // Check if application was successfully submitted
+  function checkForApplicationSuccess() {
+    const url = window.location.href.toLowerCase();
+    const title = document.title.toLowerCase();
+    const bodyText = document.body?.textContent?.toLowerCase() || '';
+    
+    // Success URL patterns
+    const successUrlPatterns = [
+      /success/i, /thank.?you/i, /submitted/i, /confirmed/i, /complete/i,
+      /applied/i, /application.?received/i, /next.?steps/i
+    ];
+    
+    // Success content patterns
+    const successContentPatterns = [
+      /application.*submitted/i, /thank.*applying/i, /application.*received/i,
+      /successfully.*applied/i, /application.*confirmed/i, /next.*steps/i,
+      /we.*received.*application/i, /application.*complete/i
+    ];
+    
+    const isSuccessPage = 
+      successUrlPatterns.some(pattern => pattern.test(url)) ||
+      successUrlPatterns.some(pattern => pattern.test(title)) ||
+      successContentPatterns.some(pattern => pattern.test(bodyText));
+    
+    if (isSuccessPage) {
+      console.log('🎉 Application success detected!');
+      showApplicationTrackingDialog();
+    }
+  }
+  
+  // Show dialog to track the application
+  function showApplicationTrackingDialog() {
+    // Prevent multiple dialogs
+    if (document.querySelector('.resaid-tracking-dialog')) return;
+    
+    // Extract job details from page
+    const jobDetails = extractJobDetails();
+    
+    // Create dialog
+    const dialog = document.createElement('div');
+    dialog.className = 'resaid-tracking-dialog';
+    dialog.innerHTML = `
+      <div style="
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: white;
+        border: 2px solid #667eea;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        z-index: 10000;
+        max-width: 400px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      ">
+        <div style="display: flex; align-items: center; margin-bottom: 16px;">
+          <div style="width: 32px; height: 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; margin-right: 12px;"></div>
+          <h3 style="margin: 0; color: #333; font-size: 18px;">Track Application</h3>
+        </div>
+        
+        <p style="margin: 0 0 16px 0; color: #666; font-size: 14px;">
+          We detected a successful job application. Would you like to track it?
+        </p>
+        
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 14px; color: #333; margin-bottom: 4px;"><strong>Company:</strong> ${jobDetails.company || 'Unknown'}</div>
+          <div style="font-size: 14px; color: #333; margin-bottom: 4px;"><strong>Position:</strong> ${jobDetails.position || 'Unknown'}</div>
+          <div style="font-size: 14px; color: #333;"><strong>Location:</strong> ${jobDetails.location || 'Unknown'}</div>
+        </div>
+        
+        <div style="display: flex; gap: 8px;">
+          <button id="track-yes" style="
+            flex: 1;
+            padding: 10px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+          ">Track It</button>
+          <button id="track-no" style="
+            flex: 1;
+            padding: 10px 16px;
+            background: #f5f5f5;
+            color: #666;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+          ">Not Now</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(dialog);
+    
+    // Handle button clicks
+    document.getElementById('track-yes').addEventListener('click', () => {
+      trackApplication(jobDetails);
+      dialog.remove();
+    });
+    
+    document.getElementById('track-no').addEventListener('click', () => {
+      dialog.remove();
+    });
+    
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+      if (dialog.parentNode) {
+        dialog.remove();
+      }
+    }, 10000);
+  }
+  
+  // Extract job details from the current page
+  function extractJobDetails() {
+    const title = document.title;
+    const url = window.location.href;
+    const bodyText = document.body?.textContent || '';
+    
+    // Try to extract company and position from title
+    let company = '';
+    let position = '';
+    let location = '';
+    
+    // Common patterns: "Company - Position" or "Position at Company"
+    const titlePatterns = [
+      /^(.+?)\s*[-–—]\s*(.+)$/,
+      /^(.+?)\s+at\s+(.+)$/,
+      /^(.+?)\s*\|\s*(.+)$/,
+      /^(.+?)\s*@\s*(.+)$/
+    ];
+    
+    for (const pattern of titlePatterns) {
+      const match = title.match(pattern);
+      if (match) {
+        if (title.toLowerCase().includes(' at ')) {
+          position = match[1].trim();
+          company = match[2].trim();
+        } else {
+          company = match[1].trim();
+          position = match[2].trim();
+        }
+        break;
+      }
+    }
+    
+    // If no match, try to extract from URL
+    if (!company || !position) {
+      const urlParts = url.split('/').filter(p => p);
+      for (const part of urlParts) {
+        if (part.length > 2 && !part.includes('.') && !/\d/.test(part)) {
+          if (!company) company = part;
+          else if (!position) position = part;
+        }
+      }
+    }
+    
+    // Try to extract location from body text
+    const locationPatterns = [
+      /location:?\s*([^,\n]{1,50})/i,
+      /📍\s*([^,\n]{1,50})/,
+      /location[^:]*:?\s*([^,\n]{1,50})/i
+    ];
+    
+    for (const pattern of locationPatterns) {
+      const match = bodyText.match(pattern);
+      if (match && match[1]) {
+        location = match[1].trim();
+        break;
+      }
+    }
+    
+    return {
+      company: company || 'Unknown Company',
+      position: position || 'Unknown Position', 
+      location: location || 'Unknown Location',
+      url: url,
+      appliedDate: new Date().toISOString()
+    };
+  }
+  
+  // Save application to local storage
+  async function trackApplication(jobDetails) {
+    try {
+      console.log('💾 Saving application:', jobDetails);
+      
+      // Send to background script to save
+      chrome.runtime.sendMessage({
+        type: 'SAVE_APPLICATION',
+        data: {
+          company: jobDetails.company,
+          position: jobDetails.position,
+          location: jobDetails.location,
+          url: jobDetails.url,
+          status: 'Applied',
+          appliedDate: jobDetails.appliedDate,
+          notes: 'Automatically tracked by ResAid'
+        }
+      });
+      
+      // Show success feedback
+      showTrackingSuccess();
+      
+    } catch (error) {
+      console.error('Error tracking application:', error);
+    }
+  }
+  
+  // Show success feedback
+  function showTrackingSuccess() {
+    const success = document.createElement('div');
+    success.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      z-index: 10001;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-weight: 600;
+    `;
+    success.textContent = '✅ Application tracked successfully!';
+    
+    document.body.appendChild(success);
+    
+    setTimeout(() => {
+      if (success.parentNode) {
+        success.remove();
+      }
+    }, 3000);
+  }
+  
+  // Initialize application tracking
+  initApplicationTracking();
 
 })();

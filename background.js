@@ -84,6 +84,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.sync.get([
       'fullName',
       'firstName',
+      'middleName',
       'lastName', 
       'email', 
       'phone',
@@ -95,8 +96,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       'addressLine2',
       'country',
       'province', 
-      'linkedin', 
-      'currentCompany'
+      'linkedin',
+      'github',
+      'portfolio',
+      'twitter',
+      'pronouns',
+      'currentCompany',
+      'salary',
+      'availability',
+      'workAuth',
+      'referral'
     ], (result) => {
       sendResponse({ success: true, data: result });
     });
@@ -195,7 +204,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function handleGenerateAnswer(data, tabId) {
   const { resumeId, question, jobDescription, guidelines } = data;
 
-  // Local heuristic-based answer generation using stored profile data
+  try {
+    // Check if API is configured
+    const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+    
+    if (settings.apiEndpoint && settings.apiKey && resumeId) {
+      // Use web app API for AI-powered answer generation
+      console.log('Using web app API for answer generation...');
+      
+      const response = await fetch(`${settings.apiEndpoint}/api/resumes/${resumeId}/answers`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${settings.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          questions: [question], // API expects array of questions
+          jobDescription,
+          guidelines,
+          tone: 'neutral' // Default tone
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.answers && result.answers.length > 0) {
+          console.log('AI answer generated successfully');
+          return { 
+            answer: result.answers[0], // Take first answer since we sent one question
+            model: result.model || 'gpt-4',
+            source: 'api'
+          };
+        }
+      }
+      
+      console.log('API call failed, falling back to local generation');
+    }
+  } catch (apiError) {
+    console.log('API error, falling back to local generation:', apiError);
+  }
+
+  // Fallback: Local heuristic-based answer generation using stored profile data
+  console.log('Using local answer generation...');
   const profile = await chrome.storage.sync.get([
     'fullName','firstName','lastName','email','phone','city','country','linkedin',
     'expectedSalary','yearsExperience','currentCompany','willingRelocate','workAuthorization','noticePeriod'
@@ -221,5 +271,5 @@ async function handleGenerateAnswer(data, tabId) {
     answerText = answerText.slice(0, 900) + '...';
   }
 
-  return { answer: answerText, model: 'local' };
+  return { answer: answerText, model: 'local-heuristic', source: 'local' };
 }

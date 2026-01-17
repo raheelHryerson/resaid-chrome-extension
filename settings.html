@@ -79,7 +79,28 @@
 <body>
   <h1>⚙️ ResAid Settings</h1>
   
-  
+  <div class="section">
+    <h2 style="margin-top: 0; margin-bottom: 16px;">🔗 Account Connection</h2>
+    <p class="help" style="margin-bottom: 16px;">
+      Connect your extension to your ResAid account to automatically sync your profile data and resumes. Your resumes will be loaded directly from your web app account.
+    </p>
+    
+    <label for="apiEndpoint">API Endpoint</label>
+    <input type="url" id="apiEndpoint" placeholder="https://your-resaid-app.vercel.app" />
+    <p class="help">Your deployed ResAid web app URL</p>
+
+    <label for="apiKey" style="margin-top: 12px;">API Key</label>
+    <input type="password" id="apiKey" placeholder="Your API key from the web app" />
+    <p class="help">Get your API key from your ResAid dashboard</p>
+
+    <button id="getApiKeyBtn" style="margin-top: 12px; padding: 8px 16px; background: #4CAF50;">
+      🔑 Get API Key from Web App
+    </button>
+    
+    <button id="syncResumesBtn" style="margin-top: 12px; margin-left: 12px; padding: 8px 16px; background: #2196F3;">
+      📄 Sync Resumes from Account
+    </button>
+  </div>
 
   <div class="section">
     <h2 style="margin-top: 0; margin-bottom: 16px;">👤 Personal Information</h2>
@@ -88,7 +109,7 @@
     </p>
     
     <button id="fetchProfileBtn" style="margin-bottom: 20px; padding: 10px 20px;">
-      📥 Load from Onboarding
+      📥 Load from Account
     </button>
 
     <label for="fullName">Full Name</label>
@@ -133,6 +154,33 @@
 
     <label for="currentCompany" style="margin-top: 12px;">Current Company</label>
     <input type="text" id="currentCompany" placeholder="Acme Corp" />
+
+    <label for="middleName" style="margin-top: 12px;">Middle Name</label>
+    <input type="text" id="middleName" placeholder="James" />
+
+    <label for="github" style="margin-top: 12px;">GitHub URL</label>
+    <input type="url" id="github" placeholder="https://github.com/johndoe" />
+
+    <label for="portfolio" style="margin-top: 12px;">Portfolio/Website</label>
+    <input type="url" id="portfolio" placeholder="https://johndoe.dev" />
+
+    <label for="twitter" style="margin-top: 12px;">Twitter/X Profile</label>
+    <input type="url" id="twitter" placeholder="https://twitter.com/johndoe" />
+
+    <label for="pronouns" style="margin-top: 12px;">Preferred Pronouns</label>
+    <input type="text" id="pronouns" placeholder="he/him, they/them, etc." />
+
+    <label for="salary" style="margin-top: 12px;">Salary Expectations</label>
+    <input type="text" id="salary" placeholder="$80,000 - $100,000" />
+
+    <label for="availability" style="margin-top: 12px;">Availability/Start Date</label>
+    <input type="text" id="availability" placeholder="2 weeks notice, available immediately" />
+
+    <label for="workAuth" style="margin-top: 12px;">Work Authorization</label>
+    <input type="text" id="workAuth" placeholder="Authorized to work in US/Canada" />
+
+    <label for="referral" style="margin-top: 12px;">Referral Source</label>
+    <input type="text" id="referral" placeholder="LinkedIn, Indeed, Company website" />
   </div>
   
   <button id="saveBtn">Save Settings</button>
