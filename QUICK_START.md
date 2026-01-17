@@ -1,10 +1,8 @@
 # Quick Start Guide
 
 ## Prerequisites
-1. ResAid API server running (local or deployed)
-2. At least one resume uploaded and parsed in ResAid
-3. OpenAI API key configured in your API's `.env.local`
-4. PNG icons generated (see ICON_SETUP.md)
+1. At least one resume to upload (PDF/DOCX)
+2. PNG icons generated (see ICON_SETUP.md)
 
 ## Load Extension in Chrome
 
@@ -18,9 +16,7 @@
 
 1. Click the ResAid extension icon in Chrome toolbar
 2. Click **⚙️ Extension Settings** at the bottom
-3. Enter your API endpoint:
-   - Local dev: `http://localhost:3000`
-   - Production: Your Vercel URL
+3. Optionally click "Load from Onboarding" to copy your details
 4. Click **Save Settings**
 
 ## Test It Out
@@ -36,7 +32,7 @@ Go to any of these:
 1. Click the ResAid icon
 2. You should see:
    - ✓ Job description detected (if on a job page)
-   - Resume dropdown (loaded from your API)
+   - Resume dropdown (loaded from local storage)
    - Guidelines textarea
 
 ### Step 3: Enable Autofill
@@ -67,12 +63,9 @@ Go to any of these:
 - Refresh the page after enabling
 - Check that the field is a standard `<textarea>` or `<input type="text">`
 
-**API errors:**
-- Open DevTools Console (F12)
-- Check Network tab for failed requests
-- Verify API endpoint in extension settings
-- Ensure your API server is running
-- Confirm OPENAI_API_KEY is set in API's `.env.local`
+**Answers seem generic:**
+- Add more detailed guidelines in the popup
+- Ensure onboarding information is filled to personalize outputs
 
 **Extension won't load:**
 - Ensure PNG icons exist (see ICON_SETUP.md)

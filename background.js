@@ -141,6 +141,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'SAVE_APPLICATION') {
+    // Save application to local storage for tracker
+    chrome.storage.local.get(['applications'], (result) => {
+      const applications = result.applications || [];
+      const newApplication = {
+        id: Date.now().toString(),
+        company: message.data.company,
+        position: message.data.position,
+        matchScore: message.data.matchScore,
+        status: message.data.status,
+        notes: message.data.notes,
+        dateAdded: new Date().toISOString(),
+        dateModified: new Date().toISOString()
+      };
+      
+      applications.unshift(newApplication);
+      chrome.storage.local.set({ applications });
+      sendResponse({ success: true, id: newApplication.id });
+    });
+    return true;
+  }
+
   if (message.type === 'CALCULATE_FIT_SCORE') {
     // Calculate fit score using scoring algorithm
     (async () => {
@@ -172,35 +194,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function handleGenerateAnswer(data, tabId) {
   const { resumeId, question, jobDescription, guidelines } = data;
-  
-  // Get API endpoint and key from storage
-  const config = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
-  const endpoint = config.apiEndpoint || 'http://localhost:3000';
-  const apiKey = config.apiKey;
 
-  const headers = {
-    'Content-Type': 'application/json',
-  };
-  
-  if (apiKey) {
-    headers['Authorization'] = `Bearer ${apiKey}`;
+  // Local heuristic-based answer generation using stored profile data
+  const profile = await chrome.storage.sync.get([
+    'fullName','firstName','lastName','email','phone','city','country','linkedin',
+    'expectedSalary','yearsExperience','currentCompany','willingRelocate','workAuthorization','noticePeriod'
+  ]);
+
+  const name = profile.fullName || [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'I';
+  const years = profile.yearsExperience ? `${profile.yearsExperience} years` : null;
+  const company = profile.currentCompany || null;
+  const relocate = profile.willingRelocate ? 'I am open to relocation' : '';
+  const auth = profile.workAuthorization ? `Work authorization: ${profile.workAuthorization}.` : '';
+
+  const jdSynopsis = (jobDescription || '').slice(0, 280).replace(/\s+/g, ' ').trim();
+  const keepShort = (guidelines || '').toLowerCase().includes('under 200 words');
+
+  const intro = `Hello, my name is ${name}.`;
+  const exp = years ? ` I have ${years} of experience` : '';
+  const curr = company ? `, most recently at ${company}.` : '.';
+  const role = jdSynopsis ? ` I reviewed the role and its requirements: ${jdSynopsis}` : '';
+  const close = ` ${relocate} ${auth}`.trim();
+
+  let answerText = `${intro}${exp}${curr}${role} ${question ? `Here's my response: ${question}` : ''}`.trim();
+  if (keepShort && answerText.length > 900) {
+    answerText = answerText.slice(0, 900) + '...';
   }
 
-  const response = await fetch(`${endpoint}/api/resumes/${resumeId}/answers`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      jobDescription: jobDescription || '',
-      questions: [question],
-      tone: 'neutral',
-      guidelines: guidelines || ''
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
-  }
-
-  const result = await response.json();
-  return result.answers?.[0] || null;
+  return { answer: answerText, model: 'local' };
 }

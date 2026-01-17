@@ -72,6 +72,9 @@ function displayScoreBreakdown(scoreData) {
     insightsContainer.appendChild(item);
   }
   
+  // Display skills gap analysis
+  displaySkillsGap(scoreData);
+  
   // Recommendations
   if (scoreData.recommendations && scoreData.recommendations.length > 0) {
     const rec = scoreData.recommendations[0];
@@ -82,6 +85,37 @@ function displayScoreBreakdown(scoreData) {
   }
 }
 
+// Display skills gap analysis
+function displaySkillsGap(scoreData) {
+  const gapSection = document.getElementById('skillsGapSection');
+  const gapList = document.getElementById('skillsGapList');
+  
+  if (!scoreData.missingSkills || scoreData.missingSkills.length === 0) {
+    gapSection.style.display = 'none';
+    return;
+  }
+  
+  gapSection.style.display = 'block';
+  
+  // Estimate impact of adding each skill (rough calculation)
+  const skillImpacts = scoreData.missingSkills.map((skill, index) => {
+    // Assume each missing required skill adds ~5-8% to match score
+    const impact = Math.min(8 - (index * 0.5), 5);
+    return { skill, impact: Math.round(impact) };
+  }).slice(0, 5); // Show top 5 missing skills
+  
+  gapList.innerHTML = skillImpacts.map(item => `
+    <div class="gap-item">
+      <span class="gap-skill">${item.skill}</span>
+      <span class="gap-impact">+${item.impact}%</span>
+    </div>
+  `).join('');
+  
+  if (skillImpacts.length === 0) {
+    gapList.innerHTML = '<div class="gap-empty">Great match! No major gaps detected.</div>';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const jobStatus = document.getElementById('jobStatus');
   const refreshJobBtn = document.getElementById('refreshJobBtn');
@@ -89,32 +123,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   const guidelinesInput = document.getElementById('guidelines');
   const enableBtn = document.getElementById('enableAutofill');
   const settingsLink = document.getElementById('settingsLink');
+  const openTrackerBtn = document.getElementById('openTrackerBtn');
 
   let currentTab = null;
   let jobDescription = null;
-  let apiKey = null;
+  // Backend API key removed. All data now uses local storage.
 
   // Get current tab
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTab = tabs[0];
 
-  // Load saved guidelines and API endpoint
-  const saved = await chrome.storage.sync.get(['guidelines', 'apiEndpoint', 'apiKey']);
+  // Tracker button
+  openTrackerBtn.addEventListener('click', () => {
+    const trackerUrl = chrome.runtime.getURL('tracker.html');
+    chrome.tabs.create({ url: trackerUrl });
+  });
+
+  // Load saved guidelines
+  const saved = await chrome.storage.sync.get(['guidelines']);
   if (saved.guidelines) {
     guidelinesInput.value = saved.guidelines;
-  }
-
-  const apiEndpoint = saved.apiEndpoint || 'http://localhost:3000';
-  apiKey = saved.apiKey || null;
-
-  if (!apiEndpoint) {
-    jobStatus.className = 'status warning';
-    jobStatus.textContent = '⚠️ API endpoint not configured. Click settings below.';
-  }
-
-  if (!apiKey) {
-    jobStatus.className = 'status warning';
-    jobStatus.textContent = '⚠️ API key not set. Go to settings to add it.';
   }
 
   // Load job description from storage
@@ -230,26 +258,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Load resumes from API
+  // Load resumes from local storage
   async function loadResumes() {
     try {
-      const config = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
-      const endpoint = config.apiEndpoint || 'http://localhost:3000';
-      const key = config.apiKey || apiKey;
-
-      const headers = { 'Content-Type': 'application/json' };
-      if (key) {
-        headers['Authorization'] = `Bearer ${key}`;
-      }
-
-      const response = await fetch(`${endpoint}/api/resumes`, { headers });
-      if (!response.ok) {
-        const body = await response.text();
-        throw new Error(`Failed to load resumes (HTTP ${response.status}). ${body}`);
-      }
-
-      const data = await response.json();
-      const resumes = data.resumes || [];
+      const stored = await chrome.storage.local.get(['resumes']);
+      const resumes = stored.resumes || [];
 
       resumeSelect.innerHTML = '';
       
@@ -261,7 +274,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       resumes.forEach(resume => {
         const option = document.createElement('option');
-        option.value = resume.id;
+        option.value = resume.id || resume.fileName;
         option.textContent = resume.fileName || 'Resume';
         if (resume.isDefault) {
           option.selected = true;
@@ -394,21 +407,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Calculate and display fit score
   async function calculateFitScore() {
     const resumeId = resumeSelect.value;
-    if (!resumeId || !jobDescription || !apiKey) return;
+    if (!resumeId || !jobDescription) return;
 
     try {
-      // Get resume data
-      const response = await fetch(`${apiEndpoint}/api/user/profile`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) return;
-
-      const resumeData = await response.json();
+      // Build resume data from stored onboarding info
+      const profile = await chrome.storage.sync.get([
+        'firstName','lastName','email','phone','city','country','linkedin',
+        'expectedSalary','yearsExperience','currentCompany','willingRelocate','workAuthorization','noticePeriod'
+      ]);
+      const resumeData = profile; // simple object used by scoring
 
       // Send to background to calculate score (content.js has the scoring function)
       const scoreResult = await chrome.runtime.sendMessage({

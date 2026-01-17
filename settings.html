@@ -79,32 +79,16 @@
 <body>
   <h1>⚙️ ResAid Settings</h1>
   
-  <div class="section">
-    <label for="apiEndpoint">API Endpoint</label>
-    <input type="text" id="apiEndpoint" placeholder="http://localhost:3000" />
-    <div class="help">URL of your ResAid API server (e.g., http://localhost:3000 or https://resaid.vercel.app)</div>
-  </div>
   
-  <div class="section">
-    <label for="apiKey">API Key</label>
-    <input type="password" id="apiKey" placeholder="Paste your API key here" />
-    <div class="help">
-      <strong>How to get your API key:</strong><br>
-      1. Go to your ResAid dashboard<br>
-      2. Scroll to "Chrome Extension API Key" section<br>
-      3. Click "Copy" to copy your API key<br>
-      4. Paste it here and save
-    </div>
-  </div>
 
   <div class="section">
     <h2 style="margin-top: 0; margin-bottom: 16px;">👤 Personal Information</h2>
     <p class="help" style="margin-bottom: 16px;">
-      This info will be auto-filled in common form fields. Click "Fetch from Resume" to extract from your uploaded resume.
+      This info will be auto-filled in common form fields. Click "Load from Onboarding" to copy details you saved during onboarding.
     </p>
     
     <button id="fetchProfileBtn" style="margin-bottom: 20px; padding: 10px 20px;">
-      📥 Fetch from Resume
+      📥 Load from Onboarding
     </button>
 
     <label for="fullName">Full Name</label>

@@ -1,8 +1,6 @@
 // Settings page logic
 
 document.addEventListener('DOMContentLoaded', async () => {
-  const apiEndpointInput = document.getElementById('apiEndpoint');
-  const apiKeyInput = document.getElementById('apiKey');
   const fullNameInput = document.getElementById('fullName');
   const firstNameInput = document.getElementById('firstName');
   const lastNameInput = document.getElementById('lastName');
@@ -24,8 +22,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load existing settings
   const settings = await chrome.storage.sync.get([
-    'apiEndpoint', 
-    'apiKey',
     'fullName',
     'firstName',
     'lastName',
@@ -42,14 +38,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     'linkedin',
     'currentCompany'
   ]);
-  
-  if (settings.apiEndpoint) {
-    apiEndpointInput.value = settings.apiEndpoint;
-  }
-  
-  if (settings.apiKey) {
-    apiKeyInput.value = settings.apiKey;
-  }
 
   // Load personal info
   fullNameInput.value = settings.fullName || '';
@@ -68,38 +56,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   linkedinInput.value = settings.linkedin || '';
   currentCompanyInput.value = settings.currentCompany || '';
 
-  // Fetch profile from API
+  // Load profile from onboarding (sync storage)
   fetchProfileBtn.addEventListener('click', async () => {
-    const apiEndpoint = apiEndpointInput.value.trim() || 'http://localhost:3000';
-    const apiKey = apiKeyInput.value.trim();
-
-    if (!apiKey) {
-      status.className = 'status';
-      status.style.background = '#ffebee';
-      status.style.color = '#c62828';
-      status.style.display = 'block';
-      status.textContent = '⚠️ Please enter your API key first';
-      return;
-    }
-
-    fetchProfileBtn.textContent = '⏳ Fetching...';
+    fetchProfileBtn.textContent = '⏳ Loading...';
     fetchProfileBtn.disabled = true;
-
     try {
-      const response = await fetch(`${apiEndpoint}/api/user/profile`, {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch profile');
-      }
-
-      const data = await response.json();
-      const profile = data.profile;
-
-      // Populate all fields
+      const profile = await chrome.storage.sync.get([
+        'fullName','firstName','lastName','email','phone','countryPhoneCode','extension','city','postalCode',
+        'location','addressLine2','country','province','linkedin','currentCompany'
+      ]);
+      // Populate all fields from onboarding
       fullNameInput.value = profile.fullName || '';
       firstNameInput.value = profile.firstName || '';
       lastNameInput.value = profile.lastName || '';
@@ -117,7 +83,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       currentCompanyInput.value = profile.currentCompany || '';
 
       status.className = 'status success';
-      status.textContent = '✓ Profile fetched successfully! Click Save to store.';
+      status.textContent = '✓ Profile loaded from onboarding. Click Save to store.';
     } catch (err) {
       status.className = 'status';
       status.style.background = '#ffebee';
@@ -125,19 +91,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       status.style.display = 'block';
       status.textContent = '❌ Error: ' + err.message;
     } finally {
-      fetchProfileBtn.textContent = '📥 Fetch from Resume';
+      fetchProfileBtn.textContent = '📥 Load from Onboarding';
       fetchProfileBtn.disabled = false;
     }
   });
 
   // Save settings
   saveBtn.addEventListener('click', async () => {
-    const apiEndpoint = apiEndpointInput.value.trim() || 'http://localhost:3000';
-    const apiKey = apiKeyInput.value.trim();
-
     await chrome.storage.sync.set({
-      apiEndpoint,
-      apiKey: apiKey || null,
       fullName: fullNameInput.value.trim(),
       firstName: firstNameInput.value.trim(),
       lastName: lastNameInput.value.trim(),

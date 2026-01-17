@@ -1375,6 +1375,36 @@
 
   // Remove automatic autofill on DOM mutations; only fill when user presses the button
 
+  // Helper function to extract company name from text
+  function extractCompanyName(text) {
+    // Try to find common company name indicators
+    const patterns = [
+      /(?:about|welcome to|join|apply at|company:?)\s+([A-Z][A-Za-z0-9\s&]+)/i,
+      /©\s*([A-Z][A-Za-z0-9\s&]+)/i,
+      /([A-Z][A-Za-z0-9\s&]+)\s+(?:careers|jobs|hiring)/i
+    ];
+    
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+    
+    // Fallback: extract from domain
+    try {
+      const domain = new URL(window.location.href).hostname;
+      const parts = domain.split('.');
+      if (parts.length > 1) {
+        return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+      }
+    } catch (e) {
+      // Ignore
+    }
+    
+    return null;
+  }
+
   // Listen for messages from popup/background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'GET_PAGE_JOB_DESCRIPTION') {
@@ -1397,6 +1427,27 @@
     
     if (message.type === 'AUTOFILL_COMMON_FIELDS') {
       autoFillCommonFields();
+      
+      // Auto-save to application tracker
+      if (detectedJobDescription) {
+        const jobTitle = document.title || 'Job Position';
+        const companyName = extractCompanyName(document.body.innerText || '') || 'Unknown Company';
+        const matchScore = Math.round((detectedJobDescription.confidence || 0.5) * 100);
+        
+        chrome.runtime.sendMessage({
+          type: 'SAVE_APPLICATION',
+          data: {
+            company: companyName,
+            position: jobTitle,
+            matchScore: matchScore,
+            status: 'applied',
+            notes: window.location.href
+          }
+        }).catch(() => {
+          // Tracker not available, that's fine
+        });
+      }
+      
       sendResponse({ success: true });
     }
 

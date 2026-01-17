@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ResAid - Application Tracker</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .header h1 {
+      font-size: 28px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .stat-card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 5px;
+    }
+    
+    .stat-label {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .streak-card {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    .streak-value {
+      font-size: 48px;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+    
+    .streak-label {
+      font-size: 12px;
+      opacity: 0.9;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .achievements-section {
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .section-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 15px;
+      color: #333;
+    }
+    
+    .achievements-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 15px;
+    }
+    
+    .achievement {
+      text-align: center;
+      padding: 15px;
+      border-radius: 8px;
+      background: #f5f5f5;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 2px solid transparent;
+    }
+    
+    .achievement.unlocked {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-color: #667eea;
+    }
+    
+    .achievement:hover {
+      transform: translateY(-5px);
+    }
+    
+    .achievement-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    
+    .achievement-name {
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    
+    .achievement-desc {
+      font-size: 10px;
+      opacity: 0.7;
+    }
+    
+    .applications-section {
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .filters {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    
+    .filter-btn {
+      padding: 8px 16px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.3s ease;
+    }
+    
+    .filter-btn.active {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-color: #667eea;
+    }
+    
+    .applications-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .applications-table th {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 2px solid #667eea;
+      font-weight: 600;
+      color: #333;
+      font-size: 13px;
+    }
+    
+    .applications-table td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      font-size: 13px;
+    }
+    
+    .match-score {
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+    
+    .match-high {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .match-medium {
+      background: #fff3e0;
+      color: #e65100;
+    }
+    
+    .match-low {
+      background: #ffebee;
+      color: #c62828;
+    }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    
+    .status-applied {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+    
+    .status-interview {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .status-rejected {
+      background: #ffebee;
+      color: #c62828;
+    }
+    
+    .status-offer {
+      background: #f3e5f5;
+      color: #6a1b9a;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #999;
+    }
+    
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 15px;
+    }
+    
+    .add-btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+    
+    .add-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .action-btn {
+      background: none;
+      border: none;
+      color: #667eea;
+      cursor: pointer;
+      font-size: 13px;
+      text-decoration: underline;
+      padding: 0;
+    }
+    
+    .action-btn:hover {
+      color: #764ba2;
+    }
+    
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .modal.open {
+      display: flex;
+    }
+    
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    
+    .modal-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #333;
+    }
+    
+    .form-group {
+      margin-bottom: 15px;
+    }
+    
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: #333;
+    }
+    
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+    
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    
+    .form-actions button {
+      flex: 1;
+      padding: 10px;
+      border-radius: 6px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .btn-save {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .btn-cancel {
+      background: #f0f0f0;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📊 Application Tracker</h1>
+      <button class="add-btn" id="addApplicationBtn">+ Add Application</button>
+    </div>
+    
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="totalApps">0</div>
+        <div class="stat-label">Total Applications</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="avgScore">0%</div>
+        <div class="stat-label">Avg Match Score</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="thisWeek">0</div>
+        <div class="stat-label">This Week</div>
+      </div>
+      <div class="streak-card">
+        <div class="streak-value" id="streakCount">0🔥</div>
+        <div class="streak-label">Day Streak</div>
+      </div>
+    </div>
+    
+    <div class="achievements-section">
+      <div class="section-title">🏆 Achievements</div>
+      <div class="achievements-grid" id="achievementsGrid">
+        <!-- Achievements will be populated here -->
+      </div>
+    </div>
+    
+    <div class="applications-section">
+      <div class="section-title">📝 My Applications</div>
+      <div class="filters">
+        <button class="filter-btn active" data-status="all">All</button>
+        <button class="filter-btn" data-status="applied">Applied</button>
+        <button class="filter-btn" data-status="interview">Interview</button>
+        <button class="filter-btn" data-status="offer">Offer</button>
+        <button class="filter-btn" data-status="rejected">Rejected</button>
+      </div>
+      <table class="applications-table" id="applicationsTable">
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th>Position</th>
+            <th>Applied</th>
+            <th>Match Score</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="applicationsBody">
+          <tr><td colspan="6" style="text-align: center; padding: 40px; color: #999;">No applications yet. Start adding your applications to track your progress!</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  
+  <!-- Add/Edit Application Modal -->
+  <div class="modal" id="applicationModal">
+    <div class="modal-content">
+      <div class="modal-title" id="modalTitle">Add Application</div>
+      <form id="applicationForm">
+        <div class="form-group">
+          <label>Company Name *</label>
+          <input type="text" id="companyName" required>
+        </div>
+        <div class="form-group">
+          <label>Job Position *</label>
+          <input type="text" id="jobPosition" required>
+        </div>
+        <div class="form-group">
+          <label>Match Score (%)</label>
+          <input type="number" id="matchScore" min="0" max="100" value="0">
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="applicationStatus">
+            <option value="applied">Applied</option>
+            <option value="interview">Interview Scheduled</option>
+            <option value="offer">Offer Received</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Follow-up Date</label>
+          <input type="date" id="followUpDate">
+        </div>
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="applicationNotes" placeholder="Add any notes about this application..."></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-save">Save Application</button>
+          <button type="button" class="btn-cancel" id="cancelBtn">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <script src="tracker.js"></script>
+</body>
+</html>

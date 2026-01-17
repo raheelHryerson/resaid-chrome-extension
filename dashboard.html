@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ResAid - Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f7fa;
+      min-height: 100vh;
+    }
+    
+    .navbar {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 15px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .navbar-brand {
+      font-size: 24px;
+      font-weight: 700;
+    }
+    
+    .navbar-user {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .user-email {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 30px;
+    }
+    
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 30px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    
+    .tab {
+      padding: 12px 24px;
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      font-size: 15px;
+      font-weight: 600;
+      color: #666;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .tab:hover {
+      color: #667eea;
+    }
+    
+    .tab.active {
+      color: #667eea;
+      border-bottom-color: #667eea;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+    }
+    
+    .card-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #333;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #333;
+    }
+    
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    
+    .form-group textarea {
+      resize: vertical;
+      min-height: 100px;
+    }
+    
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+    }
+    
+    .btn {
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: none;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+    
+    .upload-box {
+      border: 2px dashed #ddd;
+      border-radius: 8px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .upload-box:hover {
+      border-color: #667eea;
+      background: #f8f9fa;
+    }
+    
+    .resume-list {
+      list-style: none;
+    }
+    
+    .resume-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      transition: all 0.3s ease;
+    }
+    
+    .resume-item:hover {
+      background: #f8f9fa;
+      border-color: #667eea;
+    }
+    
+    .resume-info {
+      flex: 1;
+    }
+    
+    .resume-name {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 4px;
+    }
+    
+    .resume-meta {
+      font-size: 12px;
+      color: #999;
+    }
+    
+    .resume-actions {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .search-box {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    
+    .search-box:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #999;
+    }
+    
+    .empty-icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    
+    .stat-card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      text-align: center;
+    }
+    
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 5px;
+    }
+    
+    .stat-label {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .achievement-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 15px;
+    }
+    
+    .achievement {
+      text-align: center;
+      padding: 20px;
+      border-radius: 8px;
+      background: #f5f5f5;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .achievement.unlocked {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .achievement:hover {
+      transform: translateY(-5px);
+    }
+    
+    .achievement-icon {
+      font-size: 36px;
+      margin-bottom: 8px;
+    }
+    
+    .achievement-name {
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .table th {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 2px solid #667eea;
+      font-weight: 600;
+      color: #333;
+      font-size: 13px;
+    }
+    
+    .table td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      font-size: 13px;
+    }
+    
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    
+    .badge-applied {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+    
+    .badge-interview {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .badge-offer {
+      background: #f3e5f5;
+      color: #6a1b9a;
+    }
+    
+    .badge-rejected {
+      background: #ffebee;
+      color: #c62828;
+    }
+    
+    .match-score {
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+    
+    .match-high {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .match-medium {
+      background: #fff3e0;
+      color: #e65100;
+    }
+    
+    .match-low {
+      background: #ffebee;
+      color: #c62828;
+    }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <div class="navbar-brand">✨ ResAid</div>
+    <div class="navbar-user">
+      <span class="user-email" id="userEmail">user@example.com</span>
+    </div>
+  </div>
+  
+  <div class="container">
+    <div class="tabs">
+      <button class="tab active" data-tab="resumes">📄 Resumes</button>
+      <button class="tab" data-tab="personal">👤 Personal Info</button>
+      <button class="tab" data-tab="applications">📝 Applications</button>
+      <button class="tab" data-tab="achievements">🏆 Achievements</button>
+    </div>
+    
+    <!-- Tab 1: Resumes -->
+    <div class="tab-content active" id="resumes-tab">
+      <div class="card">
+        <h2 class="card-title">My Resumes</h2>
+        
+        <div class="upload-box" id="uploadBox">
+          <div style="font-size: 48px; margin-bottom: 15px;">📤</div>
+          <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Upload New Resume</div>
+          <div style="font-size: 14px; color: #999;">PDF, DOC, DOCX • Max 5MB</div>
+          <input type="file" id="resumeFileInput" accept=".pdf,.doc,.docx" style="display: none;" />
+        </div>
+        
+        <h3 style="margin-top: 30px; margin-bottom: 15px; font-size: 16px;">Past Resumes</h3>
+        <ul class="resume-list" id="resumeList">
+          <li class="empty-state">
+            <div class="empty-icon">📁</div>
+            <div>No resumes uploaded yet</div>
+          </li>
+        </ul>
+      </div>
+    </div>
+    
+    <!-- Tab 2: Personal Info -->
+    <div class="tab-content" id="personal-tab">
+      <div class="card">
+        <h2 class="card-title">Common Information</h2>
+        <p style="color: #666; margin-bottom: 20px; font-size: 14px;">
+          This information will be auto-filled in job applications
+        </p>
+        
+        <form id="personalInfoForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label>First Name *</label>
+              <input type="text" id="firstName" required />
+            </div>
+            <div class="form-group">
+              <label>Last Name *</label>
+              <input type="text" id="lastName" required />
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label>Email *</label>
+              <input type="email" id="email" required />
+            </div>
+            <div class="form-group">
+              <label>Phone *</label>
+              <input type="tel" id="phone" required />
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label>City</label>
+              <input type="text" id="city" />
+            </div>
+            <div class="form-group">
+              <label>Country</label>
+              <input type="text" id="country" />
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>LinkedIn Profile</label>
+            <input type="url" id="linkedin" placeholder="https://linkedin.com/in/yourprofile" />
+          </div>
+          
+          <button type="submit" class="btn btn-primary">Save Personal Info</button>
+        </form>
+      </div>
+      
+      <div class="card">
+        <h2 class="card-title">Extra Information</h2>
+        <p style="color: #666; margin-bottom: 20px; font-size: 14px;">
+          Additional details to help with specific questions
+        </p>
+        
+        <form id="extraInfoForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Expected Salary (Annual)</label>
+              <input type="text" id="expectedSalary" placeholder="e.g., $80,000 - $100,000" />
+            </div>
+            <div class="form-group">
+              <label>Years of Experience</label>
+              <input type="number" id="yearsExperience" min="0" />
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Current Company</label>
+            <input type="text" id="currentCompany" />
+          </div>
+          
+          <div class="form-group">
+            <label>Willing to Relocate?</label>
+            <select id="willingRelocate">
+              <option value="">Select...</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+              <option value="maybe">Maybe</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Work Authorization</label>
+            <select id="workAuthorization">
+              <option value="">Select...</option>
+              <option value="citizen">Citizen</option>
+              <option value="permanent_resident">Permanent Resident</option>
+              <option value="work_visa">Work Visa</option>
+              <option value="require_sponsorship">Require Sponsorship</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Notice Period</label>
+            <input type="text" id="noticePeriod" placeholder="e.g., 2 weeks, Immediate" />
+          </div>
+          
+          <div class="form-group">
+            <label>Cover Letter Template</label>
+            <textarea id="coverLetterTemplate" placeholder="Optional: Your default cover letter template..."></textarea>
+          </div>
+          
+          <button type="submit" class="btn btn-primary">Save Extra Info</button>
+        </form>
+      </div>
+    </div>
+    
+    <!-- Tab 3: Applications -->
+    <div class="tab-content" id="applications-tab">
+      <div class="card">
+        <h2 class="card-title">My Applications</h2>
+        
+        <input 
+          type="text" 
+          class="search-box" 
+          id="searchBox" 
+          placeholder="🔍 Search by company or job title..."
+        />
+        
+        <table class="table" id="applicationsTable">
+          <thead>
+            <tr>
+              <th>Company</th>
+              <th>Position</th>
+              <th>Applied</th>
+              <th>Match Score</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="applicationsBody">
+            <tr>
+              <td colspan="6" style="text-align: center; padding: 40px; color: #999;">
+                No applications yet. Start applying to jobs!
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    
+    <!-- Tab 4: Achievements -->
+    <div class="tab-content" id="achievements-tab">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="totalApps">0</div>
+          <div class="stat-label">Total Applications</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="avgScore">0%</div>
+          <div class="stat-label">Avg Match Score</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="thisWeek">0</div>
+          <div class="stat-label">This Week</div>
+        </div>
+        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+          <div class="stat-value" id="streakCount" style="-webkit-text-fill-color: white;">0🔥</div>
+          <div class="stat-label" style="color: white; opacity: 0.9;">Day Streak</div>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h2 class="card-title">🏆 Achievements</h2>
+        <div class="achievement-grid" id="achievementGrid">
+          <!-- Achievements will be populated by JavaScript -->
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="dashboard.js"></script>
+</body>
+</html>

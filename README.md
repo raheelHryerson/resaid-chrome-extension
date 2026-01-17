@@ -18,18 +18,13 @@ AI-powered job application autofill using your resume and the job description on
 3. Click **Load unpacked**
 4. Select this `chrome-extension` folder
 
-### Configure API Endpoint
+### Setup
 
-1. Click the ResAid extension icon
-2. Click **⚙️ Extension Settings**
-3. Enter your API endpoint:
-   - Local: `http://localhost:3000`
-   - Production: Your deployed Vercel URL (e.g., `https://resaid.vercel.app`)
-4. Save settings
+No backend required. The extension runs fully locally and uses Chrome storage for resumes and profile data.
 
 ## Usage
 
-1. **Upload a Resume**: Go to your ResAid dashboard and upload/parse a resume
+1. **Upload a Resume**: Use onboarding or the Dashboard Resumes tab to add a resume
 2. **Visit a Job Site**: Navigate to Workday, LinkedIn, etc.
 3. **Open Extension**: Click the ResAid icon in your toolbar
 4. **Verify Detection**: The extension will show if a job description was detected
@@ -55,12 +50,11 @@ AI-powered job application autofill using your resume and the job description on
 - **popup.html/js**: Extension popup UI
 - **settings.html/js**: Configuration page
 
-## API Integration
+## Data Flow
 
-The extension calls:
-- `GET /api/resumes` - List user resumes
-- `POST /api/resumes/:id/answers` - Generate answers
-  - Body: `{ jobDescription, questions[], tone, guidelines }`
+- Resumes are stored in `chrome.storage.local` with metadata and base64 content.
+- Personal info is stored in `chrome.storage.sync` from onboarding/settings.
+- Answer generation uses a local heuristic based on your profile and the detected job description.
 
 ## Icon Conversion
 
@@ -75,11 +69,10 @@ convert icon128.svg -resize 16x16 icon16.png
 
 Or use https://cloudconvert.com/svg-to-png
 
-## Security
+## Privacy & Storage
 
-- API keys stored in `chrome.storage.sync` (encrypted by Chrome)
-- Job descriptions stored in `chrome.storage.session` (cleared on browser close)
-- All network requests go through your API endpoint (CORS must allow extension origin)
+- Job descriptions are stored in `chrome.storage.session` (cleared on browser close).
+- Resumes and application data are kept local to your browser.
 
 ## Troubleshooting
 
@@ -91,10 +84,8 @@ Or use https://cloudconvert.com/svg-to-png
 - Ensure the extension is enabled and you clicked "Enable Smart Autofill"
 - Check if the field is a standard input/textarea
 
-**API errors:**
-- Verify your API endpoint in settings
-- Check that OPENAI_API_KEY is set in your API's .env
-- Open DevTools → Console for detailed error messages
+**Local generation too generic:**
+- Add guidelines in the popup to steer tone and content (e.g., "Keep under 200 words", "Emphasize leadership").
 
 ## Next Steps
 
