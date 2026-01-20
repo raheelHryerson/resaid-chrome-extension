@@ -327,6 +327,46 @@ async function handleGenerateAnswer(data, tabId) {
   const { resumeId, question, jobDescription, guidelines } = data;
 
   try {
+    // Check subscription status
+    const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+    if (settings.apiEndpoint && settings.apiKey) {
+      try {
+        const subResponse = await fetch(`${settings.apiEndpoint}/api/subscription/check`, {
+          headers: {
+            'Authorization': `Bearer ${settings.apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (subResponse.ok) {
+          const subData = await subResponse.json();
+          if (subData.status === 'free') {
+            // Check usage limits for free users
+            const usage = await chrome.storage.sync.get(['aiUsageCount', 'aiUsageMonth']);
+            const currentMonth = new Date().getMonth();
+            const lastMonth = usage.aiUsageMonth || currentMonth;
+            
+            let count = usage.aiUsageCount || 0;
+            if (lastMonth !== currentMonth) {
+              count = 0; // Reset monthly count
+            }
+            
+            if (count >= 1) { // 1 free smart fill per month
+              throw new Error('Free plan limit reached. Upgrade to premium for unlimited smart fills.');
+            }
+            
+            // Increment count
+            await chrome.storage.sync.set({
+              aiUsageCount: count + 1,
+              aiUsageMonth: currentMonth
+            });
+          }
+        }
+      } catch (err) {
+        console.log('Failed to check subscription:', err);
+        // Continue anyway for now
+      }
+    }
+
     // Get AI settings
     const aiSettings = await chrome.storage.sync.get(['aiApiKey', 'aiModel', 'aiEnabled']);
     
