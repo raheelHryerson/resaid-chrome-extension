@@ -6,21 +6,10 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 // Handle keyboard shortcuts
-chrome.commands.onCommand.addListener(async (command) => {
+chrome.commands.onCommand.addListener((command) => {
   if (command === 'smart-fill') {
     console.log('ResAid: Smart fill keyboard shortcut triggered');
-    
-    // Get the active tab
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab) {
-      try {
-        // Send message to content script to perform smart fill
-        await chrome.tabs.sendMessage(tab.id, { type: 'SMART_FILL' });
-        console.log('ResAid: Smart fill triggered via shortcut');
-      } catch (error) {
-        console.error('ResAid: Error triggering smart fill via shortcut:', error);
-      }
-    }
+    // TODO: Implement smart fill logic
   }
 });
 
@@ -33,14 +22,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'UPDATE_BADGE') {
     const tabId = sender.tab?.id;
     if (tabId) {
-      console.log('ResAid: UPDATE_BADGE received - hasJob:', message.hasJob, 'tabId:', tabId);
       if (message.hasJob) {
         chrome.action.setBadgeText({ text: '✓', tabId: tabId });
         chrome.action.setBadgeBackgroundColor({ color: '#4CAF50', tabId: tabId });
-        console.log('ResAid: Badge set to ✓ for tab', tabId);
       } else {
         chrome.action.setBadgeText({ text: '', tabId: tabId });
-        console.log('ResAid: Badge cleared for tab', tabId);
       }
     }
     sendResponse({ success: true });
@@ -55,10 +41,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         timestamp: Date.now()
       }
     });
-
-    // Update badge since we have a job description
-    chrome.action.setBadgeText({ text: '✓', tabId: sender.tab.id });
-    chrome.action.setBadgeBackgroundColor({ color: '#4CAF50', tabId: sender.tab.id });
 
     // Also store last detected globally for carry-over across tabs
     try {

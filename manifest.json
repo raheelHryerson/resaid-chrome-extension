@@ -6,7 +6,9 @@
   "permissions": [
     "activeTab",
     "storage",
-    "scripting"
+    "scripting",
+    "notifications",
+    "tabs"
   ],
   "host_permissions": [
     "https://*/*",
@@ -35,5 +37,14 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "options_page": "settings.html"
+  "options_page": "settings.html",
+  "commands": {
+    "smart-fill": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+F",
+        "mac": "Command+Shift+F"
+      },
+      "description": "Smart Fill - Fill job application fields"
+    }
+  }
 }

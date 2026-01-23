@@ -16,9 +16,27 @@
     'div[data-automation*="jobDescription"]',
     '[role="article"]',
     
-    // Workday specific
+    // Workday specific (expanded)
     '[data-automation-id="jobPostingDescription"]',
+    '[data-automation-id*="jobDescription"]',
+    '[data-automation-id*="jobPosting"]',
+    '[data-automation-id*="jobDetail"]',
+    '[data-automation-id*="jobSummary"]',
+    '[data-qa*="job-description"]',
+    '[data-testid*="job-description"]',
     '.job-description',
+    '[class*="workday-job-description"]',
+    '[class*="job-posting-description"]',
+    '[class*="job-details"]',
+    '[class*="jobDetail"]',
+    '[id*="job-description"]',
+    '[id*="jobDescription"]',
+    '[id*="jobDetail"]',
+    // Generic job content containers
+    '[class*="description"]',
+    '[class*="responsibilities"]',
+    '[class*="qualifications"]',
+    '[class*="requirements"]',
     
     // LinkedIn
     '.description__text',
@@ -42,33 +60,59 @@
     'div[role="textbox"]'
   ];
 
-  // Field patterns for instant autofill
+  // Keyword-based field detection (more reliable than patterns)
+  const FIELD_KEYWORDS = {
+    firstName: ['firstname', 'first_name', 'fname', 'givenname', 'first', 'given_name', 'forename'],
+    lastName: ['lastname', 'last_name', 'lname', 'surname', 'familyname', 'family_name', 'last'],
+    middleName: ['middlename', 'middle_name', 'mname', 'middle'],
+    fullName: ['fullname', 'full_name', 'name', 'applicantname', 'candidatename'],
+    email: ['email', 'e-mail', 'emailaddress'],
+    phone: ['phone', 'telephone', 'mobile', 'cell', 'phonenumber'],
+    extension: ['extension', 'ext'],
+    countryPhoneCode: ['countrycode', 'country_code', 'countryphonecode', 'intlcode'],
+    linkedin: ['linkedin', 'linkedinurl'],
+    github: ['github', 'githuburl'],
+    portfolio: ['portfolio', 'website', 'personalwebsite'],
+    twitter: ['twitter', 'twitterurl'],
+    pronouns: ['pronouns'],
+    city: ['city', 'town'],
+    postalCode: ['postal', 'zip', 'zipcode', 'postcode', 'postalcode'],
+    country: ['country', 'nation', 'countryregion'],
+    location: ['address', 'location', 'residence'],
+    currentCompany: ['company', 'employer', 'organization', 'currentcompany'],
+    salary: ['salary', 'compensation'],
+    availability: ['availability', 'startdate'],
+    workAuth: ['workauth', 'visa', 'workpermit'],
+    referral: ['referral', 'referredby', 'source']
+  };
+
+  // Field patterns for instant autofill (fallback when keywords don't match)
   const FIELD_PATTERNS = {
     // Order matters: more specific patterns BEFORE broader ones
-    firstName: ['firstname', 'first_name', 'fname', 'givenname', 'legalname--firstname', 'first name', 'first-name', 'given_name', 'given-name', 'forename', 'first', 'name_first', 'firstName', 'first-name-input', 'input-firstname', 'first_name_field'],
-    middleName: ['middlename', 'middle_name', 'mname', 'middlename', 'middle name'],
-    lastName: ['lastname', 'last_name', 'lname', 'surname', 'familyname', 'legalname--lastname', 'last name', 'last-name', 'family_name', 'family-name', 'surname_field', 'lastName', 'last-name-input', 'input-lastname', 'last_name_field'],
-    fullName: ['full name', 'fullname', 'full_name', 'applicantname', 'candidatename', 'legal name', 'legalname', 'your name'],
-    email: ['email', 'e-mail', 'emailaddress', 'mail', 'email address'],
+    firstName: ['legalname--firstname', 'legalname--firstName', 'first name', 'first-name', 'given_name', 'given-name', 'name_first', 'firstName', 'first-name-input', 'input-firstname', 'first_name_field'],
+    middleName: ['middle name'],
+    lastName: ['legalname--lastname', 'legalname--lastName', 'legalName--lastName', 'last name', 'last-name', 'family_name', 'family-name', 'surname_field', 'lastName', 'last-name-input', 'input-lastname', 'last_name_field'],
+    fullName: ['full name', 'legal name', 'legalname', 'your name'],
+    email: ['e-mail', 'email address'],
     // Put extension and country code before phone so "phoneNumber--extension" maps correctly
-    extension: ['extension', 'ext', 'phone extension', 'ext number'],
-    countryPhoneCode: ['country code', 'country phone code', 'phone country', 'intl code', 'countryphonecode'],
-    phone: ['phone', 'telephone', 'mobile', 'cell', 'phonenumber', 'contact', 'phone number'],
-    linkedin: ['linkedin', 'linkedinurl', 'linkedin_url', 'linkedinprofile', 'linkedin profile'],
-    github: ['github', 'githuburl', 'github_url', 'githubprofile', 'github profile'],
-    portfolio: ['portfolio', 'website', 'personal website', 'personal site', 'portfolio url', 'website url'],
-    twitter: ['twitter', 'twitterurl', 'twitter_url', 'twitterprofile', 'twitter profile'],
-    pronouns: ['pronouns', 'preferred pronouns', 'gender pronouns'],
+    countryPhoneCode: ['country code', 'country phone code', 'phone country', 'intl code', 'countryphonecode', 'phoneNumber--countryPhoneCode'],
+    phone: ['telephone', 'mobile', 'cell', 'contact', 'phone number', 'phoneNumber'],
+    extension: ['phone extension', 'ext number', 'phoneNumber--extension'],
+    linkedin: ['linkedin_url', 'linkedinprofile', 'linkedin profile'],
+    github: ['github_url', 'githubprofile', 'github profile'],
+    portfolio: ['personal website', 'personal site', 'portfolio url', 'website url'],
+    twitter: ['twitter_url', 'twitterprofile', 'twitter profile'],
+    pronouns: ['preferred pronouns', 'gender pronouns'],
     // Specific address fields BEFORE generic location
-    city: ['city', 'town', 'city of residence'],
-    postalCode: ['postal', 'zip', 'zipcode', 'postcode', 'postalcode', 'zip code', 'postal code'],
-    country: ['country', 'nation', 'countryregion', 'province', 'territory', 'region', 'state', 'provinceorterritory'],
-    location: ['addressline1', 'addressline2', 'address1', 'address2', 'address', 'street', 'location', 'residence', 'currentlocation', 'current location'],
-    currentCompany: ['company', 'employer', 'organization', 'currentcompany', 'current_company', 'current employer'],
-    salary: ['salary', 'salary expectation', 'expected salary', 'salary range', 'compensation'],
-    availability: ['availability', 'available date', 'start date', 'available to start', 'notice period'],
+    postalCode: ['zip code', 'postal code', 'postalCode'],
+    city: ['city of residence'],
+    country: ['province', 'territory', 'region', 'state', 'provinceorterritory'],
+    location: ['addressline1', 'addressline2', 'address1', 'address2', 'street', 'currentlocation', 'current location'],
+    currentCompany: ['current_company', 'current employer'],
+    salary: ['salary expectation', 'expected salary', 'salary range'],
+    availability: ['available date', 'start date', 'available to start', 'notice period'],
     workAuth: ['work authorization', 'work auth', 'visa status', 'work permit', 'eligible to work'],
-    referral: ['referral', 'referred by', 'how did you hear', 'referral source']
+    referral: ['referred by', 'how did you hear', 'referral source']
   };
 
   // State
@@ -103,10 +147,10 @@
 
     // Log top candidates with detailed scoring
     const topCandidates = scoredCandidates.slice(0, 3);
-    console.log('\n📊 ResAid: Job Description Scoring Results');
+    console.log('\nResAid: Job Description Scoring Results');
     console.log('═══════════════════════════════════════════════════════════════');
     topCandidates.forEach((c, idx) => {
-      console.log(`\n🔹 Candidate ${idx + 1}:`);
+      console.log(`\nCandidate ${idx + 1}:`);
       console.log(`   Overall Confidence: ${(c.score.total * 100).toFixed(0)}%`);
       console.log(`   Text Length: ${c.text.length} chars`);
       console.log(`   Signal Breakdown:`);
@@ -130,8 +174,9 @@
       };
     }
 
-    // Fallback: if confidence 0.5-0.75, return with medium confidence
-    if (scoredCandidates[0] && scoredCandidates[0].score.total >= 0.5) {
+    // Fallback: if confidence 0.3-0.75, return with medium confidence (lowered threshold)
+    if (scoredCandidates[0] && scoredCandidates[0].score.total >= 0.3) {
+      console.log('ResAid: Accepting candidate with confidence:', scoredCandidates[0].score.total);
       return {
         text: scoredCandidates[0].text.trim(),
         element: scoredCandidates[0].element,
@@ -141,6 +186,18 @@
     }
 
     console.log('ResAid: All candidates below confidence threshold');
+    
+    // Debug: Log all candidates with their scores for troubleshooting
+    if (scoredCandidates.length > 0) {
+      console.log('ResAid: Debug - All candidates and scores:');
+      scoredCandidates.slice(0, 5).forEach((c, idx) => {
+        console.log(`  Candidate ${idx + 1}: ${c.score.total.toFixed(3)} confidence, ${c.text.length} chars`);
+        console.log(`    Reasons: ${c.score.reasons.join(', ')}`);
+        console.log(`    Signal breakdown:`, c.score.signalBreakdown);
+        console.log(`    Text preview: "${c.text.substring(0, 200)}..."`);
+      });
+    }
+    
     return null;
   }
 
@@ -158,10 +215,25 @@
       '[id*="jobDescription"]',
       '[class*="job-details"]',
       '[data-automation-id="jobPostingDescription"]',
+      '[data-automation-id*="jobDescription"]',
+      '[data-automation-id*="jobPosting"]',
+      '[data-automation-id*="jobDetail"]',
+      '[data-automation-id*="jobSummary"]',
+      '[data-qa*="job-description"]',
+      '[data-testid*="job-description"]',
       '.job-description',
       '.description__text',
       '.show-more-less-html__markup',
-      '.posting-description'
+      '.posting-description',
+      '[class*="workday-job-description"]',
+      '[class*="job-posting-description"]',
+      '[class*="jobDetail"]',
+      '[id*="jobDetail"]',
+      // Generic job content containers
+      '[class*="description"]',
+      '[class*="responsibilities"]',
+      '[class*="qualifications"]',
+      '[class*="requirements"]'
     ];
 
     for (const selector of JOB_DESCRIPTION_SELECTORS) {
@@ -196,24 +268,24 @@
     }
 
     // Fallback: Look for divs containing job posting keywords
-    const allDivs = document.querySelectorAll('div');
-    console.log(`ResAid: Checking ${allDivs.length} divs in fallback...`);
+    const allDivs = document.querySelectorAll('div, section, article');
+    console.log(`ResAid: Checking ${allDivs.length} elements in fallback...`);
     let fallbackChecked = 0;
     for (const el of allDivs) {
       const text = (el.innerText || el.textContent || '').trim();
-      if (text && text.length >= 1500 && text.length <= 20000 && !seen.has(text)) {
+      if (text && text.length >= 1000 && text.length <= 20000 && !seen.has(text)) {
         fallbackChecked++;
         // Look for multiple job posting indicators
-        const hasJobKeywords = /\b(job\s+description|description:|responsibilities:|qualifications:|requirements:|what you['']ll do|minimum qualifications|nice to have)\b/i.test(text);
+        const hasJobKeywords = /\b(job\s+description|description:|responsibilities:|qualifications:|requirements:|what you['']ll do|minimum qualifications|nice to have|about this role|in this role)\b/i.test(text);
         if (hasJobKeywords) {
           const visible = isVisible(el);
           const inNav = isInNavFooter(el);
           const noise = isNavigationNoise(text, el);
-          console.log(`ResAid: Fallback div (${text.length} chars): hasKeywords=true, visible=${visible}, inNav=${inNav}, isNoise=${noise}`);
+          console.log(`ResAid: Fallback element (${text.length} chars): hasKeywords=true, visible=${visible}, inNav=${inNav}, isNoise=${noise}`);
           if (visible && !inNav && !noise) {
             candidates.push({ element: el, text });
             seen.add(text);
-            console.log(`ResAid: ✅ Added candidate from fallback (${text.length} chars)`);
+            console.log(`ResAid: Added candidate from fallback (${text.length} chars)`);
           }
         }
       }
@@ -279,18 +351,28 @@
       return false; // Always include - even if technically in a nav wrapper
     }
 
+    // Check if element contains job-related content - if so, don't filter
+    const elementText = (element.innerText || element.textContent || '').toLowerCase();
+    const hasJobContent = /\b(responsibilities|qualifications|requirements|job description|role and responsibilities|what you['']ll do|about this role)\b/i.test(elementText);
+    if (hasJobContent) {
+      return false; // Don't filter if it contains job content
+    }
+
     let current = element;
     while (current) {
-      const tag = current.tagName.toLowerCase();
-      const classes = (current.className || '').toLowerCase();
+      // Check if current element is nav, footer, header, or has nav-related classes
+      const tagName = current.tagName?.toLowerCase();
+      const currentClass = (current.className || '').toLowerCase();
       const currentId = (current.id || '').toLowerCase();
       
-      if (tag === 'nav' || tag === 'footer' ||
-          classes.includes('nav') || classes.includes('footer') ||
-          classes.includes('sidebar') || classes.includes('aside') ||
-          currentId.includes('nav') || currentId.includes('footer')) {
-        return true;
+      if (tagName === 'nav' || tagName === 'footer' || tagName === 'header' ||
+          currentClass.includes('nav') || currentClass.includes('navigation') ||
+          currentClass.includes('footer') || currentClass.includes('header') ||
+          currentId.includes('nav') || currentId.includes('navigation') ||
+          currentId.includes('footer') || currentId.includes('header')) {
+        return true; // This element is inside navigation or footer
       }
+      
       current = current.parentElement;
     }
     return false;
@@ -513,14 +595,14 @@
       const educationScore = scoreEducationMatch(resume.education, jobData.educationRequirements);
       const keywordScore = scoreKeywordCoverage(resume.allText, jobDescription);
 
-      // Weighted composite (your spec: Skills 35%, Exp 30%, Role 15%, Seniority 10%, Edu 5%, Keywords 5%)
+      // Weighted composite (Skills 40%, Exp 25%, Role 15%, Seniority 5%, Edu 5%, Keywords 10%)
       const overallScore = (
-        skillsScore * 0.35 +
-        experienceScore * 0.30 +
+        skillsScore * 0.40 +
+        experienceScore * 0.25 +
         roleScore * 0.15 +
-        seniorityScore * 0.10 +
+        seniorityScore * 0.05 +
         educationScore * 0.05 +
-        keywordScore * 0.05
+        keywordScore * 0.10
       );
 
       const normalizedScore = Math.round(overallScore * 100);
@@ -534,26 +616,26 @@
       console.log('\n📈 ResAid: Resume-Job Fit Analysis');
       console.log('═══════════════════════════════════════════════════════════════');
       console.log(`\n🎯 Overall Fit Score: ${normalizedScore}%`);
-      console.log(`\n📊 Component Breakdown:`);
-      console.log(`   • Skills Match: ${Math.round(skillsScore * 100)}% (35% weight)`);
-      console.log(`   • Experience Relevance: ${Math.round(experienceScore * 100)}% (30% weight)`);
+      console.log(`\nComponent Breakdown:`);
+      console.log(`   • Skills Match: ${Math.round(skillsScore * 100)}% (40% weight)`);
+      console.log(`   • Experience Relevance: ${Math.round(experienceScore * 100)}% (25% weight)`);
       console.log(`   • Role Alignment: ${Math.round(roleScore * 100)}% (15% weight)`);
-      console.log(`   • Seniority Match: ${Math.round(seniorityScore * 100)}% (10% weight)`);
+      console.log(`   • Seniority Match: ${Math.round(seniorityScore * 100)}% (5% weight)`);
       console.log(`   • Education Match: ${Math.round(educationScore * 100)}% (5% weight)`);
-      console.log(`   • Keyword Coverage: ${Math.round(keywordScore * 100)}% (5% weight)`);
+      console.log(`   • Keyword Coverage: ${Math.round(keywordScore * 100)}% (10% weight)`);
       
       if (missingSkills.length > 0) {
-        console.log(`\n❌ Missing Skills: ${missingSkills.slice(0, 3).join(', ')}`);
+        console.log(`\nMissing Skills: ${missingSkills.slice(0, 3).join(', ')}`);
       }
       
       const strengths = getStrengths(skillsScore, experienceScore, roleScore, seniorityScore);
       if (strengths.length > 0) {
-        console.log(`\n✅ Strengths: ${strengths.join(', ')}`);
+        console.log(`\nStrengths: ${strengths.join(', ')}`);
       }
 
       const recommendations = getRecommendations(missingSkills, experienceScore, educationScore);
       if (recommendations.length > 0) {
-        console.log(`\n💡 Recommendations: ${recommendations.join('; ')}`);
+        console.log(`\nRecommendations: ${recommendations.join('; ')}`);
       }
       console.log('\n═══════════════════════════════════════════════════════════════\n');
 
@@ -1156,7 +1238,7 @@
         }
       } catch (err) {
         console.error('ResAid autofill error:', err);
-        btn.innerText = '❌ ' + (err.message || 'Error');
+        btn.innerText = (err.message || 'Error');
         setTimeout(() => btn.remove(), 3000);
       }
     });
@@ -1382,11 +1464,27 @@ Answer the question directly and naturally, as if the applicant is writing it th
     // Join all sources and convert to lowercase
     const attributes = textSources.filter(Boolean).join(' ').toLowerCase();
 
-    // Try to match each field type with patterns
+    // Debug logging for field detection
+    console.log('ResAid: Detecting field type for:', field.name || field.id || 'unnamed field');
+    console.log('ResAid: Collected attributes:', attributes);
+
+    // FIRST: Try keyword-based detection (most reliable)
+    const fieldNameId = (field.name || field.id || '').toLowerCase();
+    for (const [fieldType, keywords] of Object.entries(FIELD_KEYWORDS)) {
+      for (const keyword of keywords) {
+        if (fieldNameId.includes(keyword)) {
+          console.log('ResAid: Keyword match:', keyword, 'for fieldType:', fieldType);
+          return fieldType;
+        }
+      }
+    }
+
+    // SECOND: Try pattern matching in attributes (fallback)
     for (const [fieldType, patterns] of Object.entries(FIELD_PATTERNS)) {
       for (const pattern of patterns) {
         const lowerPattern = pattern.toLowerCase();
         if (attributes.includes(lowerPattern)) {
+          console.log('ResAid: Pattern match:', lowerPattern, 'for fieldType:', fieldType);
           return fieldType;
         }
       }
@@ -1417,6 +1515,16 @@ Answer the question directly and naturally, as if the applicant is writing it th
         const allTextInContainer = broaderSearch.textContent || broaderSearch.innerText || '';
         const lowerText = allTextInContainer.toLowerCase();
         
+        // Check for keywords in the broader context
+        for (const [fieldType, keywords] of Object.entries(FIELD_KEYWORDS)) {
+          for (const keyword of keywords) {
+            if (lowerText.includes(keyword)) {
+              console.log('ResAid: Broad context keyword match:', keyword, 'for fieldType:', fieldType);
+              return fieldType;
+            }
+          }
+        }
+
         if (lowerText.includes('first name') || lowerText.includes('given name') || lowerText.includes('legal first')) {
           return 'firstName';
         }
@@ -1452,7 +1560,9 @@ Answer the question directly and naturally, as if the applicant is writing it th
   }
 
   // Auto-fill common fields
-  async function autoFillCommonFields() {
+  async function autoFillCommonFields(profileDataOverride = null) {
+    let personalInfo = profileDataOverride;
+    
     if (!personalInfo) {
       // Load personal info from storage
       const result = await chrome.runtime.sendMessage({ type: 'GET_PERSONAL_INFO' });
@@ -1549,9 +1659,10 @@ Answer the question directly and naturally, as if the applicant is writing it th
   // Auto-extract job description on page load (kept), but do NOT auto-fill
   setTimeout(async () => {
     let jd = extractJobDescription();
+    const originalJdValid = isValidJobDescription(jd);
 
-    if (!isValidJobDescription(jd)) {
-      // Try carry-over from previous tab
+    if (!originalJdValid) {
+      // Try carry-over from previous tab (only for fit scoring, not badge)
       const last = await chrome.runtime.sendMessage({ type: 'GET_LAST_JOB_DESCRIPTION' });
       if (last?.data?.text) {
         jd = last.data;
@@ -1575,8 +1686,17 @@ Answer the question directly and naturally, as if the applicant is writing it th
       
       console.log('ResAid: Job description available');
 
-      // Calculate and show fit score automatically
-      await calculateAndShowFitScore();
+      // Show if this is from current page or carry-over
+      if (originalJdValid) {
+        console.log('ResAid: Using job description from current page');
+      } else {
+        console.log('ResAid: Using carry-over job description from previous tab');
+      }
+
+      // Calculate and show fit score automatically (only if we have a valid JD for this page)
+      if (originalJdValid) {
+        await calculateAndShowFitScore();
+      }
     }
 
     // Auto-fill common fields if smart autofill is enabled
@@ -1585,11 +1705,68 @@ Answer the question directly and naturally, as if the applicant is writing it th
       console.log('ResAid: Smart autofill enabled, auto-filling common fields...');
       setTimeout(() => autoFillCommonFields(), 2000); // Wait a bit for dynamic content
     }
-  }, 1000);
 
-  // Calculate fit score and show floating badge
+    // Automatically analyze page for job forms and update badge (use ORIGINAL detection, not carry-over)
+    const hasJobForm = detectJobApplicationForm();
+
+    // Use original detection for badge (not carry-over)
+    const hasJobDescription = originalJdValid;
+
+    // Badge should only show for pages with actual job content, not just forms
+    const hasJob = hasJobDescription;
+
+    console.log('ResAid: Automatic page analysis complete');
+    console.log('  - hasJobForm:', hasJobForm);
+    console.log('  - hasJobDescription:', hasJobDescription);
+    console.log('  - hasJob (badge):', hasJob);
+    console.log('  - jobDesc confidence:', jd?.confidence || 'none');
+    console.log('  - using carry-over JD:', !originalJdValid && isValidJobDescription(jd));
+
+    chrome.runtime.sendMessage({
+      type: 'UPDATE_BADGE',
+      hasJob: hasJob
+    });
+
+    // Retry after 2 seconds in case content loads dynamically (only update badge if we find new content)
+    setTimeout(async () => {
+      if (!originalJdValid) {
+        console.log('ResAid: Retrying job description detection after 2 seconds...');
+        const retryJd = extractJobDescription();
+        if (isValidJobDescription(retryJd)) {
+          console.log('ResAid: Job description found on retry!');
+          detectedJobDescription = retryJd;
+          chrome.runtime.sendMessage({
+            type: 'EXTRACT_JOB_DESCRIPTION',
+            data: { text: retryJd.text, confidence: retryJd.confidence || 'medium' }
+          });
+          
+          chrome.runtime.sendMessage({
+            type: 'JOB_DESCRIPTION_DETECTED',
+            data: { text: retryJd.text, confidence: retryJd.confidence || 0.5 }
+          }).catch(() => {});
+          
+          // Update badge since we found job content on this page
+          chrome.runtime.sendMessage({
+            type: 'UPDATE_BADGE',
+            hasJob: true
+          });
+          
+          // Calculate fit score
+          await calculateAndShowFitScore();
+        }
+      }
+    }, 2000);
+  }, 500);
+
+  // Calculate fit score and show floating badge (only if valid job description exists)
   async function calculateAndShowFitScore() {
     try {
+      // Check if we have a valid job description first
+      if (!detectedJobDescription || !isValidJobDescription(detectedJobDescription)) {
+        console.log('ResAid: No valid job description found for fit scoring');
+        return;
+      }
+
       // Get personal info (acts as resume data for now)
       const personalInfoResult = await chrome.runtime.sendMessage({ type: 'GET_PERSONAL_INFO' });
       const resumeData = personalInfoResult?.data || {};
@@ -1603,7 +1780,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
       const scoreResult = await scoreResumeJobMatch(detectedJobDescription.text, resumeData);
       
       if (scoreResult && scoreResult.overallScore) {
-        // Show floating badge with score
+        // Show floating badge that triggers modal on click
         showFitScoreBadge(scoreResult);
       }
     } catch (err) {
@@ -1611,7 +1788,248 @@ Answer the question directly and naturally, as if the applicant is writing it th
     }
   }
 
-  // Show floating fit score badge on page
+  // Show detailed fit score modal with pie chart
+  function showFitScoreModal(scoreData) {
+    // Remove existing modal only (keep badge visible)
+    const existingModal = document.getElementById('resaid-fit-modal');
+    if (existingModal) existingModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'resaid-fit-modal';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      z-index: 999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
+
+    const score = scoreData.overallScore;
+    const color = score >= 75 ? '#4CAF50' : score >= 50 ? '#FF9800' : '#f44336';
+
+    // Create pie chart data
+    const components = scoreData.scoreComponents;
+    const pieData = [
+      { label: 'Skills Match', value: components.skillsMatch, color: '#667eea', weight: '40%' },
+      { label: 'Experience', value: components.experienceRelevance, color: '#764ba2', weight: '25%' },
+      { label: 'Role Alignment', value: components.roleAlignment, color: '#f093fb', weight: '15%' },
+      { label: 'Seniority', value: components.seniorityMatch, color: '#4facfe', weight: '5%' },
+      { label: 'Education', value: components.educationMatch, color: '#43e97b', weight: '5%' },
+      { label: 'Keywords', value: components.keywordCoverage, color: '#38f9d7', weight: '10%' }
+    ];
+
+    modal.innerHTML = `
+      <div style="
+        background: white;
+        border-radius: 16px;
+        padding: 24px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        position: relative;
+      ">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <div style="font-size: 14px; color: #666; margin-bottom: 8px;">Resume-Job Fit Analysis</div>
+          <div style="font-size: 48px; font-weight: 700; color: ${color}; margin-bottom: 8px;">${score}%</div>
+          <div style="font-size: 16px; color: #666;">Overall Match Score</div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <canvas id="resaid-pie-chart" width="200" height="200" style="display: block; margin: 0 auto;"></canvas>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Score Breakdown</div>
+          ${pieData.map(item => `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="display: flex; align-items: center;">
+                <div style="width: 12px; height: 12px; background: ${item.color}; border-radius: 2px; margin-right: 8px;"></div>
+                <span style="font-size: 13px; color: #555;">${item.label}</span>
+              </div>
+              <div style="font-size: 13px; font-weight: 600; color: #333;">${item.value}% <span style="color: #999; font-weight: 400;">(${item.weight})</span></div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div style="border-top: 1px solid #eee; padding-top: 20px; margin-bottom: 20px;">
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Premium Analysis</div>
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">🔒 Unlock Detailed Insights</div>
+            <div style="font-size: 13px; opacity: 0.9; margin-bottom: 12px;">
+              Get personalized recommendations to improve your resume and identify missing skills
+            </div>
+            <button id="resaid-upgrade-btn" style="
+              background: white;
+              color: #667eea;
+              border: none;
+              padding: 8px 16px;
+              border-radius: 6px;
+              font-weight: 600;
+              cursor: pointer;
+              font-size: 13px;
+            ">Upgrade to Premium</button>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+          <button id="resaid-close-modal" style="
+            flex: 1;
+            background: #f5f5f5;
+            color: #666;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+          ">Close</button>
+          <button id="resaid-view-full" style="
+            flex: 1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+          ">View Full Analysis</button>
+        </div>
+      </div>
+    `;
+
+    // Add event listeners
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.remove();
+      }
+    });
+
+    modal.querySelector('#resaid-close-modal').addEventListener('click', () => {
+      modal.remove();
+    });
+
+    modal.querySelector('#resaid-upgrade-btn').addEventListener('click', () => {
+      // TODO: Open upgrade/payment flow
+      alert('Premium upgrade coming soon!');
+    });
+
+    modal.querySelector('#resaid-view-full').addEventListener('click', () => {
+      // Show premium content (for now, just show a message)
+      showPremiumAnalysis(scoreData);
+    });
+
+    document.body.appendChild(modal);
+
+    // Draw pie chart
+    setTimeout(() => {
+      drawPieChart('resaid-pie-chart', pieData);
+    }, 100);
+  }
+
+  // Show premium analysis content
+  function showPremiumAnalysis(scoreData) {
+    const modal = document.getElementById('resaid-fit-modal');
+    if (!modal) return;
+
+    const premiumContent = modal.querySelector('.premium-content');
+    if (premiumContent) {
+      premiumContent.style.display = premiumContent.style.display === 'none' ? 'block' : 'none';
+      return;
+    }
+
+    // Add premium content
+    const container = modal.querySelector('div[style*="border-top"]');
+    const premiumDiv = document.createElement('div');
+    premiumDiv.className = 'premium-content';
+    premiumDiv.style.cssText = `
+      background: #f8f9ff;
+      border: 1px solid #e0e4ff;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    `;
+
+    premiumDiv.innerHTML = `
+      <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">🎯 Personalized Recommendations</div>
+
+      ${scoreData.missingSkills && scoreData.missingSkills.length > 0 ? `
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 13px; font-weight: 600; color: #666; margin-bottom: 8px;">Missing Skills to Add:</div>
+          <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid #eee;">
+            ${scoreData.missingSkills.map(skill => `<span style="background: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-right: 6px; margin-bottom: 4px; display: inline-block;">${skill}</span>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${scoreData.strengths && scoreData.strengths.length > 0 ? `
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 13px; font-weight: 600; color: #666; margin-bottom: 8px;">Your Strengths:</div>
+          <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid #eee;">
+            ${scoreData.strengths.map(strength => `<div style="color: #2e7d32; font-size: 13px; margin-bottom: 4px;">✓ ${strength}</div>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${scoreData.recommendations && scoreData.recommendations.length > 0 ? `
+        <div>
+          <div style="font-size: 13px; font-weight: 600; color: #666; margin-bottom: 8px;">Action Items:</div>
+          <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid #eee;">
+            ${scoreData.recommendations.map(rec => `<div style="color: #1976d2; font-size: 13px; margin-bottom: 4px;">• ${rec}</div>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+    `;
+
+    container.appendChild(premiumDiv);
+  }
+
+  // Draw pie chart using Canvas API
+  function drawPieChart(canvasId, data) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = Math.min(centerX, centerY) - 10;
+
+    let startAngle = -Math.PI / 2; // Start from top
+
+    data.forEach(item => {
+      const percentage = item.value / 100;
+      const endAngle = startAngle + (percentage * 2 * Math.PI);
+
+      // Draw slice
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+      ctx.closePath();
+      ctx.fillStyle = item.color;
+      ctx.fill();
+
+      // Draw border
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      startAngle = endAngle;
+    });
+
+    // Draw center circle for donut effect
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius * 0.6, 0, 2 * Math.PI);
+    ctx.fillStyle = 'white';
+    ctx.fill();
+  }
+
+  // Show floating fit score badge on page (now triggers modal)
   function showFitScoreBadge(scoreData) {
     // Remove existing badge
     const existing = document.getElementById('resaid-fit-badge');
@@ -1623,7 +2041,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
       position: fixed;
       bottom: 20px;
       right: 20px;
-      z-index: 999999;
+      z-index: 999998;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       padding: 16px 20px;
@@ -1638,18 +2056,15 @@ Answer the question directly and naturally, as if the applicant is writing it th
     const score = scoreData.overallScore;
     const color = score >= 75 ? '#4CAF50' : score >= 50 ? '#FF9800' : '#f44336';
 
+    const components = scoreData.scoreComponents;
     badge.innerHTML = `
       <div style="font-size: 11px; opacity: 0.9; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">Resume-Job Fit</div>
       <div style="font-size: 36px; font-weight: 700; line-height: 1; margin-bottom: 8px;">${score}%</div>
       <div style="font-size: 10px; opacity: 0.8; margin-bottom: 8px;">
-        Skills: ${scoreData.scoreComponents.skillsMatch}% • 
-        Experience: ${scoreData.scoreComponents.experienceRelevance}%
+        Skills: ${components.skillsMatch}% • 
+        Experience: ${components.experienceRelevance}%
       </div>
-      ${scoreData.missingSkills && scoreData.missingSkills.length > 0 ? 
-        `<div style="font-size: 10px; background: rgba(255,255,255,0.2); padding: 6px 8px; border-radius: 6px; margin-top: 8px;">
-          ⚠️ Missing: ${scoreData.missingSkills.slice(0, 2).join(', ')}
-        </div>` : ''}
-      <div style="font-size: 9px; opacity: 0.7; margin-top: 8px; text-align: center;">Click to open ResAid</div>
+      <div style="font-size: 9px; opacity: 0.7; margin-top: 8px; text-align: center;">Click for detailed analysis</div>
     `;
 
     badge.addEventListener('mouseenter', () => {
@@ -1663,8 +2078,8 @@ Answer the question directly and naturally, as if the applicant is writing it th
     });
 
     badge.addEventListener('click', () => {
-      // Open extension popup (triggers browser action)
-      chrome.runtime.sendMessage({ type: 'OPEN_POPUP' });
+      // Show detailed modal instead of opening popup
+      showFitScoreModal(scoreData);
     });
 
     // Slide in animation
@@ -1677,7 +2092,56 @@ Answer the question directly and naturally, as if the applicant is writing it th
     });
   }
 
-  // Remove automatic autofill on DOM mutations; only fill when user presses the button
+  // More specific job application form detection
+  function detectJobApplicationForm() {
+    // Check for job-specific keywords in title/URL
+    const titleHasJob = /job|career|application|apply|hiring|recruit/i.test(document.title);
+    const urlHasJob = /job|career|apply|application/i.test(window.location.href);
+
+    // Check for job application form patterns
+    const forms = document.querySelectorAll('form');
+    let hasJobForm = false;
+
+    for (const form of forms) {
+      const formText = (form.innerText || form.textContent || '').toLowerCase();
+      const formHtml = form.innerHTML.toLowerCase();
+
+      // Look for job application indicators
+      const jobIndicators = [
+        'resume', 'cv', 'cover letter', 'application', 'apply now',
+        'submit application', 'job application', 'career application',
+        'work experience', 'education', 'skills', 'qualifications'
+      ];
+
+      const hasJobContent = jobIndicators.some(indicator => formText.includes(indicator));
+      const hasJobFields = form.querySelector('input[type="file"]') || // Resume upload
+                          form.querySelector('textarea') || // Cover letter
+                          (form.querySelectorAll('input').length > 3); // Multiple form fields
+
+      if (hasJobContent || hasJobFields) {
+        hasJobForm = true;
+        break;
+      }
+    }
+
+    // Check for email inputs in job-related context
+    const emailInputs = document.querySelectorAll('input[type="email"]');
+    let hasJobEmail = false;
+
+    for (const email of emailInputs) {
+      const context = email.closest('form, div, section');
+      if (context) {
+        const contextText = (context.innerText || context.textContent || '').toLowerCase();
+        if (contextText.includes('application') || contextText.includes('apply') ||
+            contextText.includes('job') || contextText.includes('career')) {
+          hasJobEmail = true;
+          break;
+        }
+      }
+    }
+
+    return titleHasJob || urlHasJob || hasJobForm || hasJobEmail;
+  }
 
   // Helper function to extract company name from text
   function extractCompanyName(text) {
@@ -1731,10 +2195,18 @@ Answer the question directly and naturally, as if the applicant is writing it th
       autoFillCommonFields();
       sendResponse({ success: true });
     }
+
+    if (message.type === 'SMART_FILL') {
+      console.log('ResAid: SMART_FILL message received, calling autoFillCommonFields()');
+      autoFillCommonFields();
+      sendResponse({ success: true });
+    }
     
     if (message.type === 'AUTOFILL_COMMON_FIELDS') {
       console.log('ResAid: AUTOFILL_COMMON_FIELDS message received, calling autoFillCommonFields()');
-      autoFillCommonFields();
+      // Use profile data from message if provided, otherwise load from storage
+      const profileData = message.profileData;
+      autoFillCommonFields(profileData);
       
       // Auto-save to application tracker
       if (detectedJobDescription) {
@@ -1772,6 +2244,32 @@ Answer the question directly and naturally, as if the applicant is writing it th
         }
       })();
       return true; // Keep channel open for async response
+    }
+
+    if (message.type === 'GET_JOB_STATUS') {
+      // Return current job detection status
+      const hasJobDescription = isValidJobDescription(detectedJobDescription);
+      const hasJobForm = detectJobApplicationForm();
+      
+      sendResponse({
+        hasJob: hasJobDescription, // Badge logic: only show for job descriptions
+        hasJobForm: hasJobForm,
+        hasJobDescription: hasJobDescription
+      });
+    }
+
+    if (message.type === 'GET_JOB_DETAILS') {
+      // Get detailed job information from the page
+      const companyName = extractCompanyName(document.body.innerText || '') || 'Unknown Company';
+      const jobTitle = document.title.replace(/\|.*$/, '').trim() || 'Unknown Position';
+      const jobDescription = detectedJobDescription?.text?.substring(0, 500) || '';
+
+      sendResponse({
+        companyName: companyName,
+        jobTitle: jobTitle,
+        jobDescription: jobDescription,
+        url: window.location.href
+      });
     }
     
     return true;
@@ -2129,7 +2627,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-weight: 600;
     `;
-    success.textContent = '✅ Application tracked successfully!';
+    success.textContent = 'Application tracked successfully!';
     
     document.body.appendChild(success);
     

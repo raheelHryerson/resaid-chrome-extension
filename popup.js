@@ -1,44 +1,155 @@
-// Popup script - UI logic for the extension popup
+// Popup script - Simple, professional interface for ResAid
 
-// Animate radial score meter
-function animateScoreMeter(score) {
-  const circle = document.getElementById('scoreCircle');
-  const scoreValue = document.getElementById('scoreValue');
-  const container = document.getElementById('fitScoreContainer');
-  
-  // Show container
-  container.classList.add('visible');
-  
-  // Calculate circle progress (440 is circumference: 2 * π * 70)
-  const circumference = 440;
-  const progress = circumference - (score / 100) * circumference;
-  
-  // Animate from 0 to score
-  let current = 0;
-  const duration = 1500; // 1.5 seconds
-  const startTime = Date.now();
-  
-  function update() {
-    const elapsed = Date.now() - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    
-    // Easing function (ease-out-cubic)
-    const eased = 1 - Math.pow(1 - progress, 3);
-    current = Math.round(score * eased);
-    
-    // Update circle
-    const offset = circumference - (current / 100) * circumference;
-    circle.style.strokeDashoffset = offset;
-    
-    // Update text
-    scoreValue.textContent = current + '%';
-    
-    if (progress < 1) {
-      requestAnimationFrame(update);
+let currentTab = null;
+
+// Initialize popup
+document.addEventListener('DOMContentLoaded', async function() {
+  console.log('ResAid: Popup initialized');
+
+  // Get current tab
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  currentTab = tab;
+
+  // Load profile status
+  await loadProfileStatus();
+
+  // Analyze current page
+  await analyzeCurrentPage();
+
+  // Set up event listeners
+  setupEventListeners();
+});
+
+// Load profile status
+async function loadProfileStatus() {
+  try {
+    const result = await chrome.storage.sync.get([
+      'firstName', 'lastName', 'email', 'phone'
+    ]);
+
+    const profileStatus = document.getElementById('profileStatus');
+    if (result.firstName || result.email) {
+      profileStatus.textContent = 'Profile loaded';
+      profileStatus.className = 'status success';
+    } else {
+      profileStatus.textContent = 'No profile synced';
+      profileStatus.className = 'status warning';
     }
+  } catch (error) {
+    console.error('Error loading profile:', error);
+    document.getElementById('profileStatus').textContent = 'Error loading profile';
+    document.getElementById('profileStatus').className = 'status error';
   }
-  
-  update();
+}
+
+// Analyze current page for job application
+async function analyzeCurrentPage() {
+  const jobStatus = document.getElementById('jobStatus');
+
+  if (!currentTab) {
+    jobStatus.textContent = 'No active tab';
+    jobStatus.className = 'status warning';
+    return;
+  }
+
+  // Check if it's a chrome page
+  if (currentTab.url.startsWith('chrome://') ||
+      currentTab.url.startsWith('edge://') ||
+      currentTab.url.startsWith('about:') ||
+      currentTab.url.startsWith('chrome-extension://')) {
+    jobStatus.textContent = 'Not available on this page';
+    jobStatus.className = 'status warning';
+    return;
+  }
+
+  try {
+    // Get comprehensive job detection state from content script
+    const response = await chrome.tabs.sendMessage(currentTab.id, { type: 'GET_JOB_STATUS' });
+
+    if (response) {
+      if (response.hasJobDescription) {
+        jobStatus.textContent = 'Job description found';
+        jobStatus.className = 'status detected';
+      } else if (response.hasJobForm) {
+        jobStatus.textContent = 'Job application form detected';
+        jobStatus.className = 'status warning';
+      } else {
+        jobStatus.textContent = 'Not a job application page';
+        jobStatus.className = 'status';
+      }
+    } else {
+      jobStatus.textContent = 'Unable to analyze page';
+      jobStatus.className = 'status';
+    }
+  } catch (error) {
+    console.error('Error analyzing page:', error);
+    jobStatus.textContent = 'Unable to analyze page';
+    jobStatus.className = 'status warning';
+  }
+}
+
+// Set up event listeners
+function setupEventListeners() {
+  // Smart Fill button
+  document.getElementById('smartFillBtn').addEventListener('click', async () => {
+    await performSmartFill();
+  });
+
+  // Settings link
+  document.getElementById('settingsLink').addEventListener('click', () => {
+    chrome.runtime.openOptionsPage();
+  });
+}
+
+// Perform smart fill
+async function performSmartFill() {
+  if (!currentTab) {
+    alert('No active tab to fill');
+    return;
+  }
+
+  const button = document.getElementById('smartFillBtn');
+  const originalText = button.textContent;
+  button.textContent = 'Filling...';
+  button.disabled = true;
+
+  try {
+    // Load profile data
+    const profileData = await chrome.storage.sync.get([
+      'firstName', 'lastName', 'email', 'phone', 'city', 'state', 'country'
+    ]);
+
+    if (!profileData.firstName && !profileData.email) {
+      alert('Please sync your profile first. Click the extension icon and set up your profile.');
+      button.textContent = originalText;
+      button.disabled = false;
+      return;
+    }
+
+    // Send fill command to content script
+    const response = await chrome.tabs.sendMessage(currentTab.id, {
+      type: 'AUTOFILL_COMMON_FIELDS',
+      profileData: profileData
+    });
+
+    if (response && response.success) {
+      button.textContent = '✅ Filled!';
+      setTimeout(() => {
+        button.textContent = originalText;
+        button.disabled = false;
+        window.close(); // Close popup after successful fill
+      }, 1500);
+    } else {
+      throw new Error('Fill failed');
+    }
+  } catch (error) {
+    console.error('Error performing smart fill:', error);
+    button.textContent = '❌ Failed';
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.disabled = false;
+    }, 2000);
+  }
 }
 
 // Display score breakdown and insights
@@ -59,7 +170,7 @@ function displayScoreBreakdown(scoreData) {
     scoreData.strengths.slice(0, 2).forEach(strength => {
       const item = document.createElement('div');
       item.className = 'insight-item';
-      item.innerHTML = `✓ ${strength}`;
+      item.innerHTML = `${strength}`;
       insightsContainer.appendChild(item);
     });
   }
@@ -120,11 +231,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const jobStatus = document.getElementById('jobStatus');
   const refreshJobBtn = document.getElementById('refreshJobBtn');
   const resumeSelect = document.getElementById('resumeSelect');
-  const guidelinesInput = document.getElementById('guidelines');
-  const enableBtn = document.getElementById('enableAutofill');
   const syncProfileBtn = document.getElementById('syncProfileBtn');
-  const debugStorageBtn = document.getElementById('debugStorageBtn');
-  const testApiBtn = document.getElementById('testApiBtn');
   const settingsLink = document.getElementById('settingsLink');
   const openTrackerBtn = document.getElementById('openTrackerBtn');
 
@@ -147,10 +254,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.tabs.create({ url: trackerUrl });
   });
 
-  // Load saved guidelines
-  const saved = await chrome.storage.sync.get(['guidelines']);
-  if (saved.guidelines) {
-    guidelinesInput.value = saved.guidelines;
+  // Pin popup button
+  const pinPopupBtn = document.getElementById('pinPopup');
+  if (pinPopupBtn) {
+    pinPopupBtn.addEventListener('click', () => {
+      chrome.windows.create({
+        url: chrome.runtime.getURL('pinned-popup.html'),
+        type: 'popup',
+        width: 320,
+        height: 400,
+        focused: true,
+        top: 100,
+        left: window.screen.width - 340
+      });
+      window.close(); // Close the regular popup
+    });
   }
 
   // Load job description from storage
@@ -171,7 +289,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (response.success && response.data) {
         jobDescription = response.data;
         jobStatus.className = 'status detected';
-        jobStatus.innerHTML = `✓ Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
+        jobStatus.innerHTML = `Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
         
         // Log to console for debugging
         console.log('ResAid: Job Description detected:', {
@@ -195,7 +313,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (contentResponse && contentResponse.success && contentResponse.data) {
         jobDescription = contentResponse.data;
         jobStatus.className = 'status detected';
-        jobStatus.innerHTML = `✓ Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
+        jobStatus.innerHTML = `Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
         
         // Log to console for debugging
         console.log('ResAid: Job Description detected:', {
@@ -210,7 +328,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (last?.data?.text) {
           jobDescription = last.data;
           jobStatus.className = 'status detected';
-          jobStatus.innerHTML = `✓ Detected (carried over)`;
+          jobStatus.innerHTML = `Detected (carried over)`;
           
           // Log to console for debugging
           console.log('ResAid: Job Description carried over:', {
@@ -245,7 +363,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           jobDescription = retryResponse.data;
           const confidence = Math.round(retryResponse.data.confidence * 100);
           jobStatus.className = 'status detected';
-          jobStatus.textContent = `✓ Detected (${confidence}% confidence)`;
+          jobStatus.textContent = `Detected (${confidence}% confidence)`;
           console.log('Job Description:', {
             length: retryResponse.data.text.length,
             confidence: confidence + '%',
@@ -260,7 +378,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       } catch (injectErr) {
         console.error('Could not inject content script:', injectErr);
         jobStatus.className = 'status warning';
-        jobStatus.textContent = '⚠️ Please refresh the page and try again';
+        jobStatus.textContent = 'Please refresh the page and try again';
         refreshJobBtn.style.display = 'block';
       }
     }
@@ -316,7 +434,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (resumes.length === 0) {
         resumeSelect.innerHTML = '<option value="">No resumes found</option>';
-        enableBtn.disabled = true;
         return;
       }
 
@@ -335,22 +452,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (selectedId) {
         await chrome.storage.sync.set({ lastResumeId: selectedId });
       }
-
-      enableBtn.disabled = false;
     } catch (err) {
       console.error('Error loading resumes:', err);
       resumeSelect.innerHTML = '<option value="">Error loading resumes</option>';
-      enableBtn.disabled = true;
 
       // Show actionable hint
       jobStatus.className = 'status warning';
-      jobStatus.textContent = '⚠️ Could not load resumes. Check API key and endpoint in Settings, then reopen the popup.';
+      jobStatus.textContent = 'Could not load resumes. Check API key and endpoint in Settings, then reopen the popup.';
     }
   }
 
   // Refresh job description
   refreshJobBtn.addEventListener('click', async () => {
-    refreshJobBtn.textContent = '⏳ Refreshing...';
+    refreshJobBtn.textContent = 'Refreshing...';
     refreshJobBtn.disabled = true;
     
     // Reload content script
@@ -358,7 +472,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     setTimeout(async () => {
       await loadJobDescription();
-      refreshJobBtn.textContent = '🔄 Refresh Detection';
+      refreshJobBtn.textContent = 'Refresh Detection';
       refreshJobBtn.disabled = false;
     }, 2000);
   });
@@ -366,7 +480,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Sync profile from account
   syncProfileBtn.addEventListener('click', async () => {
     console.log('ResAid: Starting profile sync...');
-    syncProfileBtn.textContent = '⏳ Syncing...';
+    syncProfileBtn.textContent = 'Syncing...';
     syncProfileBtn.disabled = true;
 
     try {
@@ -437,11 +551,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           const verifyData = await chrome.storage.sync.get(['firstName', 'lastName', 'email']);
           console.log('ResAid: Verification - data in storage:', verifyData);
           
-          syncProfileBtn.textContent = '✓ Synced!';
+          syncProfileBtn.textContent = 'Synced!';
           syncProfileBtn.style.background = '#4CAF50';
 
           setTimeout(() => {
-            syncProfileBtn.textContent = '🔄 Sync Profile';
+            syncProfileBtn.textContent = 'Sync Profile';
             syncProfileBtn.style.background = '';
             syncProfileBtn.disabled = false;
           }, 2000);
@@ -457,114 +571,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (err) {
       console.error('ResAid: Error syncing profile:', err);
       alert('Failed to sync profile. Please check your settings and try again. Check console for details.');
-      syncProfileBtn.textContent = '🔄 Sync Profile';
+      syncProfileBtn.textContent = 'Sync Profile';
       syncProfileBtn.disabled = false;
     }
-  });
-
-  // Debug storage - show what's currently in Chrome storage
-  debugStorageBtn.addEventListener('click', async () => {
-    try {
-      const storageData = await chrome.storage.sync.get([
-        'firstName', 'lastName', 'email', 'phone', 'fullName',
-        'apiEndpoint', 'apiKey'
-      ]);
-      
-      console.log('ResAid: Current Chrome storage data:', storageData);
-      alert(`Chrome Storage Data:\n\nfirstName: "${storageData.firstName || 'NOT SET'}"\nlastName: "${storageData.lastName || 'NOT SET'}"\nemail: "${storageData.email || 'NOT SET'}"\nphone: "${storageData.phone || 'NOT SET'}"\nfullName: "${storageData.fullName || 'NOT SET'}"\n\nAPI Endpoint: ${storageData.apiEndpoint ? 'SET' : 'NOT SET'}\nAPI Key: ${storageData.apiKey ? 'SET' : 'NOT SET'}\n\nCheck browser console for full details.`);
-    } catch (err) {
-      console.error('ResAid: Error reading storage:', err);
-      alert('Error reading storage. Check console.');
-    }
-  });
-
-  // Test API connection
-  testApiBtn.addEventListener('click', async () => {
-    testApiBtn.textContent = '⏳ Testing...';
-    testApiBtn.disabled = true;
-
-    try {
-      const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
-      
-      if (!settings.apiEndpoint || !settings.apiKey) {
-        alert('API endpoint and key not configured. Go to Settings first.');
-        testApiBtn.textContent = '🔗 Test API';
-        testApiBtn.disabled = false;
-        return;
-      }
-
-      console.log('ResAid: Testing API connection to:', settings.apiEndpoint);
-      const response = await fetch(`${settings.apiEndpoint}/api/user/profile`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${settings.apiKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      console.log('ResAid: API test response status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('ResAid: API test response:', data);
-        
-        if (data.success && data.profile) {
-          alert(`✅ API Connected!\n\nProfile data received:\n• firstName: "${data.profile.firstName || 'null'}"\n• lastName: "${data.profile.lastName || 'null'}"\n• email: "${data.profile.email || 'null'}"\n\nCheck console for full response.`);
-        } else {
-          alert(`❌ API responded but invalid format. Check console.`);
-        }
-      } else {
-        const errorText = await response.text();
-        console.error('ResAid: API test error:', errorText);
-        alert(`❌ API Error: ${response.status}\n${errorText}`);
-      }
-      
-      testApiBtn.textContent = '🔗 Test API';
-      testApiBtn.disabled = false;
-    } catch (err) {
-      console.error('ResAid: API test error:', err);
-      alert(`❌ Connection Error: ${err.message}`);
-      testApiBtn.textContent = '🔗 Test API';
-      testApiBtn.disabled = false;
-    }
-  });
-
-  // Smart autofill - fill all common fields immediately
-  enableBtn.addEventListener('click', async () => {
-    const resumeId = resumeSelect.value;
-    const guidelines = guidelinesInput.value.trim();
-
-    if (!resumeId) {
-      alert('Please select a resume');
-      return;
-    }
-
-    // Save guidelines
-    await chrome.storage.sync.set({ guidelines });
-
-    enableBtn.textContent = '⏳ Filling...';
-    enableBtn.disabled = true;
-
-    try {
-      console.log('ResAid: Sending AUTOFILL_COMMON_FIELDS to tab:', currentTab.id, currentTab.url);
-      // Trigger immediate autofill of all common fields on the page
-      const response = await chrome.tabs.sendMessage(currentTab.id, {
-        type: 'AUTOFILL_COMMON_FIELDS'
-      });
-      console.log('ResAid: AUTOFILL_COMMON_FIELDS response:', response);
-
-      enableBtn.textContent = '✓ Done!';
-      enableBtn.style.background = '#4CAF50';
-    } catch (err) {
-      console.error('Error triggering autofill:', err);
-      enableBtn.textContent = 'Smart Autofill';
-      enableBtn.disabled = false;
-      alert('No personal info found. Click "Sync Profile" to load your latest data from your account, or go to Settings to add your info manually.');
-    }
-    
-    setTimeout(() => {
-      window.close();
-    }, 1000);
   });
 
   // Keep selected resume saved for fallback autofill
@@ -573,16 +582,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (selectedId) {
       await chrome.storage.sync.set({ lastResumeId: selectedId });
     }
-  });
-
-  // Save guidelines as user types (so fallback has them)
-  guidelinesInput.addEventListener('input', async () => {
-    await chrome.storage.sync.set({ guidelines: guidelinesInput.value.trim() });
-  });
-
-  // Settings
-  settingsLink.addEventListener('click', () => {
-    chrome.runtime.openOptionsPage();
   });
 
   // AI toggle
@@ -621,7 +620,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (message.type === 'JOB_DESCRIPTION_DETECTED' && sender.tab?.id === currentTab.id) {
       jobDescription = message.data;
       jobStatus.className = 'status detected';
-      jobStatus.innerHTML = `✓ Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
+      jobStatus.innerHTML = `Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
       refreshJobBtn.style.display = 'none';
       
       // Auto-calculate score if resume is selected
