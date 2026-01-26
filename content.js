@@ -2208,24 +2208,38 @@ Answer the question directly and naturally, as if the applicant is writing it th
       const profileData = message.profileData;
       autoFillCommonFields(profileData);
       
-      // Auto-save to application tracker
-      if (detectedJobDescription) {
-        const jobTitle = document.title || 'Job Position';
-        const companyName = extractCompanyName(document.body.innerText || '') || 'Unknown Company';
-        const matchScore = Math.round((detectedJobDescription.confidence || 0.5) * 100);
+      // Auto-save to application tracker if this looks like a job application
+      const jobDetails = extractJobDetails();
+      const isJobPage = isLikelyJobApplicationPage();
+      
+      if (isJobPage || detectedJobDescription) {
+        console.log('ResAid: Auto-tracking application via Smart Fill', {
+          isJobPage,
+          hasJobDescription: !!detectedJobDescription,
+          jobDetails
+        });
+        
+        const jobTitle = detectedJobDescription?.text?.split('\n')[0] || jobDetails.position || document.title || 'Job Position';
+        const companyName = extractCompanyName(document.body.innerText || '') || jobDetails.company || 'Unknown Company';
+        const matchScore = detectedJobDescription ? Math.round((detectedJobDescription.confidence || 0.5) * 100) : 0;
         
         chrome.runtime.sendMessage({
           type: 'SAVE_APPLICATION',
           data: {
             company: companyName,
             position: jobTitle,
+            location: jobDetails.location,
+            url: window.location.href,
             matchScore: matchScore,
-            status: 'applied',
-            notes: window.location.href
+            status: 'Applied',
+            appliedDate: new Date().toISOString(),
+            notes: 'Tracked via Smart Fill'
           }
-        }).catch(() => {
-          // Tracker not available, that's fine
+        }).catch((error) => {
+          console.log('ResAid: Failed to save application via Smart Fill:', error);
         });
+      } else {
+        console.log('ResAid: Smart Fill used but page not detected as job application');
       }
       
       sendResponse({ success: true });
@@ -2353,6 +2367,47 @@ Answer the question directly and naturally, as if the applicant is writing it th
     return applicationIndicators.some(indicator => 
       formHTML.includes(indicator) || formText.includes(indicator)
     );
+  }
+  
+  // Check if the current page looks like a job application page
+  function isLikelyJobApplicationPage() {
+    const pageText = document.body?.textContent?.toLowerCase() || '';
+    const pageHTML = document.body?.innerHTML?.toLowerCase() || '';
+    const url = window.location.href.toLowerCase();
+    const title = document.title.toLowerCase();
+    
+    const applicationIndicators = [
+      'job application', 'apply now', 'submit application', 'application form',
+      'cover letter', 'resume', 'cv', 'work experience', 'education',
+      'career', 'job posting', 'position details', 'apply for this job',
+      'submit your application', 'job application form'
+    ];
+    
+    const urlIndicators = [
+      'apply', 'application', 'job', 'career', 'jobs', 'careers'
+    ];
+    
+    // Check page content
+    const hasContentIndicators = applicationIndicators.some(indicator => 
+      pageText.includes(indicator) || pageHTML.includes(indicator)
+    );
+    
+    // Check URL
+    const hasUrlIndicators = urlIndicators.some(indicator => 
+      url.includes(indicator)
+    );
+    
+    // Check if there are forms with personal info fields
+    const forms = document.querySelectorAll('form');
+    let hasApplicationForm = false;
+    for (const form of forms) {
+      if (isJobApplicationForm(form)) {
+        hasApplicationForm = true;
+        break;
+      }
+    }
+    
+    return hasContentIndicators || hasUrlIndicators || hasApplicationForm;
   }
   
   // Handle form submission
@@ -2598,7 +2653,8 @@ Answer the question directly and naturally, as if the applicant is writing it th
           url: jobDetails.url,
           status: 'Applied',
           appliedDate: jobDetails.appliedDate,
-          notes: 'Automatically tracked by ResAid'
+          notes: 'Automatically tracked by ResAid',
+          jobDescription: detectedJobDescription?.text || ''
         }
       });
       

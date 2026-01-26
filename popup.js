@@ -238,7 +238,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // AI status elements
   const aiStatus = document.getElementById('aiStatus');
   const aiStatusText = document.getElementById('aiStatusText');
-  const aiToggle = document.getElementById('aiToggle');
 
   let currentTab = null;
   let jobDescription = null;
@@ -289,7 +288,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (response.success && response.data) {
         jobDescription = response.data;
         jobStatus.className = 'status detected';
-        jobStatus.innerHTML = `Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
+        jobStatus.innerHTML = 'Detected';
         
         // Log to console for debugging
         console.log('ResAid: Job Description detected:', {
@@ -313,7 +312,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (contentResponse && contentResponse.success && contentResponse.data) {
         jobDescription = contentResponse.data;
         jobStatus.className = 'status detected';
-        jobStatus.innerHTML = `Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
+        jobStatus.innerHTML = 'Detected';
         
         // Log to console for debugging
         console.log('ResAid: Job Description detected:', {
@@ -363,7 +362,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           jobDescription = retryResponse.data;
           const confidence = Math.round(retryResponse.data.confidence * 100);
           jobStatus.className = 'status detected';
-          jobStatus.textContent = `Detected (${confidence}% confidence)`;
+          jobStatus.textContent = 'Detected';
           console.log('Job Description:', {
             length: retryResponse.data.text.length,
             confidence: confidence + '%',
@@ -584,20 +583,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // AI toggle
-  aiToggle.addEventListener('change', async () => {
-    const isEnabled = aiToggle.checked;
-    await chrome.storage.sync.set({ aiEnabled: isEnabled });
-    console.log('ResAid: AI enabled state changed to:', isEnabled);
-  });
-
   // Initialize
   await loadJobDescription();
   await loadResumes();
-
-  // Load AI enabled state
-  const aiSettings = await chrome.storage.sync.get(['aiEnabled']);
-  aiToggle.checked = aiSettings.aiEnabled !== false; // Default to true if not set
 
   // Calculate fit score if both job description and resume are available
   if (jobDescription && resumeSelect.value) {
@@ -620,7 +608,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (message.type === 'JOB_DESCRIPTION_DETECTED' && sender.tab?.id === currentTab.id) {
       jobDescription = message.data;
       jobStatus.className = 'status detected';
-      jobStatus.innerHTML = `Detected (${Math.round((jobDescription.confidence || 0.5) * 100)}% confidence)`;
+      jobStatus.innerHTML = 'Detected';
       refreshJobBtn.style.display = 'none';
       
       // Auto-calculate score if resume is selected
@@ -692,10 +680,46 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load recent applications
   async function loadRecentApplications() {
     try {
+      // Try to load from website API first if configured
+      const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+      let websiteApps = [];
+      let localApps = [];
+
+      if (settings.apiEndpoint && settings.apiKey) {
+        try {
+          const response = await fetch(`${settings.apiEndpoint}/api/applications`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${settings.apiKey}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.applications) {
+              websiteApps = data.applications.slice(0, 3); // Get latest 3 from website
+            }
+          }
+        } catch (apiError) {
+          console.log('Failed to load applications from website:', apiError);
+        }
+      }
+
+      // Also load from local storage as fallback/backup
       const result = await chrome.storage.local.get(['applications']);
-      const applications = result.applications || [];
-      
-      if (applications.length === 0) {
+      localApps = result.applications || [];
+
+      // Combine and deduplicate applications (prefer website data)
+      const allApps = [...websiteApps, ...localApps];
+      const uniqueApps = allApps.filter((app, index, self) =>
+        index === self.findIndex(a =>
+          (a.jobUrl === app.jobUrl && a.jobUrl) ||
+          (a.company === app.company && a.position === app.position)
+        )
+      );
+
+      if (uniqueApps.length === 0) {
         applicationsContent.innerHTML = `
           <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
             No applications tracked yet.<br>
@@ -704,20 +728,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         `;
         return;
       }
-      
+
       // Show last 3 applications
-      const recentApps = applications.slice(-3).reverse();
-      
+      const recentApps = uniqueApps.slice(-3).reverse();
+
       applicationsContent.innerHTML = recentApps.map(app => `
         <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px; margin-bottom: 8px; background: #fafafa;">
-          <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${app.position || 'Unknown Position'}</div>
-          <div style="font-size: 14px; color: #666; margin-bottom: 4px;">${app.company || 'Unknown Company'}</div>
+          <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${app.jobTitle || app.position || 'Unknown Position'}</div>
+          <div style="font-size: 14px; color: #666; margin-bottom: 4px;">${app.companyName || app.company || 'Unknown Company'}</div>
           <div style="font-size: 12px; color: #888;">
-            ${app.status || 'Applied'} • ${new Date(app.dateAdded || app.appliedDate).toLocaleDateString()}
+            ${app.status || 'Applied'} • ${new Date(app.createdAt || app.dateAdded || app.appliedDate).toLocaleDateString()}
           </div>
         </div>
       `).join('');
-      
+
     } catch (error) {
       console.error('Error loading applications:', error);
       applicationsContent.innerHTML = `

@@ -1,7 +1,6 @@
 // Settings page logic
 
 document.addEventListener('DOMContentLoaded', async () => {
-  const fullNameInput = document.getElementById('fullName');
   const firstNameInput = document.getElementById('firstName');
   const lastNameInput = document.getElementById('lastName');
   const emailInput = document.getElementById('email');
@@ -34,15 +33,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   const apiKeyInput = document.getElementById('apiKey');
   const getApiKeyBtn = document.getElementById('getApiKeyBtn');
   const syncResumesBtn = document.getElementById('syncResumesBtn');
+  const saveApiSettingsBtn = document.getElementById('saveApiSettingsBtn');
 
   // AI settings elements
   const aiApiKeyInput = document.getElementById('aiApiKey');
   const aiModelInput = document.getElementById('aiModel');
+  const aiToggle = document.getElementById('aiToggle');
   const testAIConnectionBtn = document.getElementById('testAIConnectionBtn');
 
   // Load existing settings
   const settings = await chrome.storage.sync.get([
-    'fullName',
     'firstName',
     'middleName',
     'lastName',
@@ -69,11 +69,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     'apiEndpoint',
     'apiKey',
     'aiApiKey',
-    'aiModel'
+    'aiModel',
+    'aiEnabled'
   ]);
 
   // Load personal info
-  fullNameInput.value = settings.fullName || '';
   firstNameInput.value = settings.firstName || '';
   middleNameInput.value = settings.middleName || '';
   lastNameInput.value = settings.lastName || '';
@@ -105,6 +105,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load AI settings
   aiApiKeyInput.value = settings.aiApiKey || '';
   aiModelInput.value = settings.aiModel || 'gpt-4o-mini';
+  aiToggle.checked = settings.aiEnabled !== false; // Default to true if not set
 
   // Get API Key button
   getApiKeyBtn.addEventListener('click', () => {
@@ -168,6 +169,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Save API Settings button (saves only API endpoint and key)
+  saveApiSettingsBtn.addEventListener('click', async () => {
+    saveApiSettingsBtn.textContent = '⏳ Saving...';
+    saveApiSettingsBtn.disabled = true;
+
+    try {
+      await chrome.storage.sync.set({
+        apiEndpoint: apiEndpointInput.value.trim(),
+        apiKey: apiKeyInput.value.trim()
+      });
+
+      status.className = 'status success';
+      status.textContent = '✓ API settings saved successfully!';
+      status.style.display = 'block';
+      
+      setTimeout(() => {
+        status.style.display = 'none';
+      }, 3000);
+    } catch (error) {
+      status.className = 'status';
+      status.style.background = '#ffebee';
+      status.style.color = '#c62828';
+      status.style.display = 'block';
+      status.textContent = '❌ Failed to save API settings: ' + error.message;
+    } finally {
+      saveApiSettingsBtn.textContent = '💾 Save API Settings';
+      saveApiSettingsBtn.disabled = false;
+    }
+  });
+
   // Load profile from account (API first, then local storage fallback)
   fetchProfileBtn.addEventListener('click', async () => {
     fetchProfileBtn.textContent = '⏳ Loading...';
@@ -194,7 +225,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               const profile = data.profile;
               
               // Populate all fields from API
-              fullNameInput.value = profile.fullName || '';
+
               firstNameInput.value = profile.firstName || '';
               middleNameInput.value = profile.middleName || '';
               lastNameInput.value = profile.lastName || '';
@@ -232,12 +263,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       // Fallback to local storage
       const profile = await chrome.storage.sync.get([
-        'fullName','firstName','middleName','lastName','email','phone','countryPhoneCode','extension','city','postalCode',
+        'firstName','middleName','lastName','email','phone','countryPhoneCode','extension','city','postalCode',
         'location','addressLine2','country','province','linkedin','github','portfolio','twitter','pronouns','currentCompany','salary','availability','workAuth','referral'
       ]);
       
       // Populate all fields from local storage
-      fullNameInput.value = profile.fullName || '';
       firstNameInput.value = profile.firstName || '';
       middleNameInput.value = profile.middleName || '';
       lastNameInput.value = profile.lastName || '';
@@ -313,10 +343,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // AI Toggle
+  aiToggle.addEventListener('change', async () => {
+    await chrome.storage.sync.set({
+      aiEnabled: aiToggle.checked
+    });
+  });
+
   // Save settings
   saveBtn.addEventListener('click', async () => {
     await chrome.storage.sync.set({
-      fullName: fullNameInput.value.trim(),
       firstName: firstNameInput.value.trim(),
       middleName: middleNameInput.value.trim(),
       lastName: lastNameInput.value.trim(),
@@ -343,7 +379,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       apiEndpoint: apiEndpointInput.value.trim(),
       apiKey: apiKeyInput.value.trim(),
       aiApiKey: aiApiKeyInput.value.trim(),
-      aiModel: aiModelInput.value
+      aiModel: aiModelInput.value,
+      aiEnabled: aiToggle.checked
     });
 
     status.className = 'status success';

@@ -263,7 +263,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'SAVE_APPLICATION') {
     // Save application to local storage for tracker
-    chrome.storage.local.get(['applications'], (result) => {
+    chrome.storage.local.get(['applications'], async (result) => {
       const applications = result.applications || [];
       const newApplication = {
         id: Date.now().toString(),
@@ -273,11 +273,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         status: message.data.status,
         notes: message.data.notes,
         dateAdded: new Date().toISOString(),
-        dateModified: new Date().toISOString()
+        dateModified: new Date().toISOString(),
+        url: message.data.url || window.location.href
       };
-      
+
       applications.unshift(newApplication);
       chrome.storage.local.set({ applications });
+
+      // Also sync to website if API settings are configured
+      try {
+        const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+        if (settings.apiEndpoint && settings.apiKey) {
+          // Send to website API
+          const response = await fetch(`${settings.apiEndpoint}/api/applications`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${settings.apiKey}`
+            },
+            body: JSON.stringify({
+              jobUrl: newApplication.url,
+              companyName: newApplication.company,
+              jobTitle: newApplication.position,
+              jobDescription: message.data.jobDescription || '',
+              status: newApplication.status
+            })
+          });
+
+          if (response.ok) {
+            console.log('ResAid: Application synced to website successfully');
+          } else {
+            console.log('ResAid: Failed to sync application to website:', response.status);
+          }
+        }
+      } catch (error) {
+        console.log('ResAid: Error syncing application to website:', error);
+      }
+
       sendResponse({ success: true, id: newApplication.id });
     });
     return true;

@@ -93,13 +93,21 @@
     <input type="password" id="apiKey" placeholder="Your API key from the web app" />
     <p class="help">Get your API key from your ResAid dashboard</p>
 
-    <button id="getApiKeyBtn" style="margin-top: 12px; padding: 8px 16px; background: #4CAF50;">
-      🔑 Get API Key from Web App
-    </button>
+    <div style="display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap;">
+      <button id="getApiKeyBtn" style="padding: 8px 16px; background: #4CAF50; flex: 1;">
+        🔑 Get API Key from Web App
+      </button>
+      
+      <button id="syncResumesBtn" style="padding: 8px 16px; background: #2196F3; flex: 1;">
+        📄 Sync Resumes from Account
+      </button>
+    </div>
     
-    <button id="syncResumesBtn" style="margin-top: 12px; margin-left: 12px; padding: 8px 16px; background: #2196F3;">
-      📄 Sync Resumes from Account
-    </button>
+    <div style="text-align: center; margin-top: 12px;">
+      <button id="saveApiSettingsBtn" style="padding: 8px 16px; background: #4CAF50;">
+        💾 Save API Settings
+      </button>
+    </div>
   </div>
 
   <div class="section">
@@ -112,10 +120,7 @@
       📥 Load from Account
     </button>
 
-    <label for="fullName">Full Name</label>
-    <input type="text" id="fullName" placeholder="John Doe" />
-
-    <label for="firstName" style="margin-top: 12px;">First Name</label>
+    <label for="firstName">First Name</label>
     <input type="text" id="firstName" placeholder="John" />
 
     <label for="lastName" style="margin-top: 12px;">Last Name</label>
@@ -199,6 +204,14 @@
       <option value="gpt-4o">GPT-4o (balanced)</option>
       <option value="gpt-4-turbo">GPT-4 Turbo</option>
     </select>
+
+    <div style="margin-top: 12px; margin-bottom: 12px;">
+      <input type="checkbox" id="aiToggle" style="margin-right: 8px;">
+      <label for="aiToggle" style="font-size: 14px; color: #333; cursor: pointer;">
+        Enable AI Question Answering
+      </label>
+      <p class="help" style="margin-top: 4px;">Allow AI to automatically answer custom questions in job applications</p>
+    </div>
 
     <button id="testAIConnectionBtn" style="margin-top: 12px; padding: 8px 16px; background: #FF9800;">
       🧪 Test AI Connection
