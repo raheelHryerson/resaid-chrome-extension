@@ -55,11 +55,43 @@
       font-weight: 600;
       cursor: pointer;
       margin-top: 20px;
+      transition: all 0.2s ease;
     }
     
     button:hover {
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    
+    button:disabled:hover {
+      transform: none;
+      box-shadow: none;
+    }
+    
+    .secondary-btn {
+      background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+      flex: 1;
+      margin-top: 0;
+    }
+    
+    .secondary-btn:hover {
+      box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+    }
+    
+    .ai-btn {
+      background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+      margin-top: 12px;
+    }
+    
+    .ai-btn:hover {
+      box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
     }
     
     .status {
@@ -94,17 +126,17 @@
     <p class="help">Get your API key from your ResAid dashboard</p>
 
     <div style="display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap;">
-      <button id="getApiKeyBtn" style="padding: 8px 16px; background: #4CAF50; flex: 1;">
+      <button id="getApiKeyBtn" class="secondary-btn">
         🔑 Get API Key from Web App
       </button>
       
-      <button id="syncResumesBtn" style="padding: 8px 16px; background: #2196F3; flex: 1;">
+      <button id="syncResumesBtn" class="secondary-btn">
         📄 Sync Resumes from Account
       </button>
     </div>
     
     <div style="text-align: center; margin-top: 12px;">
-      <button id="saveApiSettingsBtn" style="padding: 8px 16px; background: #4CAF50;">
+      <button id="saveApiSettingsBtn">
         💾 Save API Settings
       </button>
     </div>
@@ -213,7 +245,7 @@
       <p class="help" style="margin-top: 4px;">Allow AI to automatically answer custom questions in job applications</p>
     </div>
 
-    <button id="testAIConnectionBtn" style="margin-top: 12px; padding: 8px 16px; background: #FF9800;">
+    <button id="testAIConnectionBtn" class="ai-btn">
       🧪 Test AI Connection
     </button>
   </div>

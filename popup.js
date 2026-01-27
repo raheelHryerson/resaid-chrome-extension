@@ -67,12 +67,12 @@ async function analyzeCurrentPage() {
     const response = await chrome.tabs.sendMessage(currentTab.id, { type: 'GET_JOB_STATUS' });
 
     if (response) {
-      if (response.hasJobDescription) {
-        jobStatus.textContent = 'Job description found';
-        jobStatus.className = 'status detected';
-      } else if (response.hasJobForm) {
+      if (response.hasJobForm) {
         jobStatus.textContent = 'Job application form detected';
         jobStatus.className = 'status warning';
+      } else if (response.hasJobDescription) {
+        jobStatus.textContent = 'Job description found';
+        jobStatus.className = 'status detected';
       } else {
         jobStatus.textContent = 'Not a job application page';
         jobStatus.className = 'status';
@@ -288,7 +288,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (response.success && response.data) {
         jobDescription = response.data;
         jobStatus.className = 'status detected';
-        jobStatus.innerHTML = 'Detected';
+        jobStatus.innerHTML = 'Job description found';
         
         // Log to console for debugging
         console.log('ResAid: Job Description detected:', {
@@ -312,7 +312,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (contentResponse && contentResponse.success && contentResponse.data) {
         jobDescription = contentResponse.data;
         jobStatus.className = 'status detected';
-        jobStatus.innerHTML = 'Detected';
+        jobStatus.innerHTML = 'Job description found';
         
         // Log to console for debugging
         console.log('ResAid: Job Description detected:', {
@@ -322,22 +322,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         refreshJobBtn.style.display = 'none';
       } else {
-        // Try global last-known JD (carry-over across tabs)
+        // Try global last-known JD (carry-over across tabs) - for fit scoring only, don't change status
         const last = await chrome.runtime.sendMessage({ type: 'GET_LAST_JOB_DESCRIPTION' });
         if (last?.data?.text) {
           jobDescription = last.data;
-          jobStatus.className = 'status detected';
-          jobStatus.innerHTML = `Detected (carried over)`;
           
           // Log to console for debugging
-          console.log('ResAid: Job Description carried over:', {
+          console.log('ResAid: Job Description carried over for fit scoring:', {
             length: jobDescription.text?.length,
             preview: jobDescription.text?.substring(0, 200) + '...'
           });
+          // Don't change the status - let analyzeCurrentPage() determine the current page status
           refreshJobBtn.style.display = 'none';
         } else {
-          jobStatus.className = 'status warning';
-          jobStatus.textContent = 'ℹ️ No job description found on this page';
+          // Don't change status here either - analyzeCurrentPage() already set it
           refreshJobBtn.style.display = 'block';
         }
       }
@@ -362,7 +360,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           jobDescription = retryResponse.data;
           const confidence = Math.round(retryResponse.data.confidence * 100);
           jobStatus.className = 'status detected';
-          jobStatus.textContent = 'Detected';
+          jobStatus.textContent = 'Job description found';
           console.log('Job Description:', {
             length: retryResponse.data.text.length,
             confidence: confidence + '%',
@@ -608,7 +606,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (message.type === 'JOB_DESCRIPTION_DETECTED' && sender.tab?.id === currentTab.id) {
       jobDescription = message.data;
       jobStatus.className = 'status detected';
-      jobStatus.innerHTML = 'Detected';
+      jobStatus.innerHTML = 'Job description found';
       refreshJobBtn.style.display = 'none';
       
       // Auto-calculate score if resume is selected

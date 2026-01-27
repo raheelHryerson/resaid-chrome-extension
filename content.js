@@ -117,6 +117,7 @@
 
   // State
   let detectedJobDescription = null;
+  let jobDescriptionFromCurrentPage = false;
   let activeField = null;
   let personalInfo = null;
 
@@ -164,8 +165,8 @@
     });
     console.log('\n═══════════════════════════════════════════════════════════════\n');
 
-    // Step 3: Return highest confidence if >= 0.75
-    if (scoredCandidates[0] && scoredCandidates[0].score.total >= 0.75) {
+    // Step 3: Return highest confidence if >= 0.5
+    if (scoredCandidates[0] && scoredCandidates[0].score.total >= 0.5) {
       return {
         text: scoredCandidates[0].text.trim(),
         element: scoredCandidates[0].element,
@@ -174,8 +175,8 @@
       };
     }
 
-    // Fallback: if confidence 0.3-0.75, return with medium confidence (lowered threshold)
-    if (scoredCandidates[0] && scoredCandidates[0].score.total >= 0.3) {
+    // Fallback: if confidence 0.2-0.5, return with medium confidence (lowered threshold)
+    if (scoredCandidates[0] && scoredCandidates[0].score.total >= 0.2) {
       console.log('ResAid: Accepting candidate with confidence:', scoredCandidates[0].score.total);
       return {
         text: scoredCandidates[0].text.trim(),
@@ -229,11 +230,23 @@
       '[class*="job-posting-description"]',
       '[class*="jobDetail"]',
       '[id*="jobDetail"]',
-      // Generic job content containers
-      '[class*="description"]',
-      '[class*="responsibilities"]',
-      '[class*="qualifications"]',
-      '[class*="requirements"]'
+      // Ashby specific selectors
+      '.job-posting__description',
+      '[data-testid="job-description"]',
+      '.job-description-content',
+      '.posting-content',
+      '.job-content',
+      '.ashby-job-posting-right-pane',
+      '[role="tabpanel"]',
+      '[id="overview"]',
+      '[class*="_description_"]',
+      '[class*="_descriptionText_"]',
+      // Additional job board selectors
+      '.job-posting-description',
+      '.job-detail-description',
+      '[class*="posting-description"]',
+      '[class*="job-content"]',
+      '[data-cy*="job-description"]'
     ];
 
     for (const selector of JOB_DESCRIPTION_SELECTORS) {
@@ -384,7 +397,7 @@
     const text = candidate.text.toLowerCase();
     const signalBreakdown = {};
 
-    // Signal 1: Header proximity (0-0.25)
+    // Signal 1: Header proximity (0-0.35)
     const headerScore = scoreHeaderProximity(candidate.element, text);
     score += headerScore.score;
     signalBreakdown['Header Proximity'] = headerScore.score;
@@ -427,7 +440,8 @@
       'job description', 'responsibilities', 'what you\'ll do',
       'requirements', 'qualifications', 'about the role',
       'about this position', 'what you will', 'essential duties',
-      'role description', 'position overview'
+      'role description', 'position overview', 'who you are',
+      'what you\'ll do', 'who you are'
     ];
 
     const hasInternalHeader = jobHeaders.some(h => text.includes(h));
@@ -444,7 +458,7 @@
       prevEl = prevEl.previousElementSibling;
     }
 
-    const headerScore = (hasInternalHeader ? 0.2 : 0) + (siblingHeaderMatch ? 0.05 : 0);
+    const headerScore = (hasInternalHeader ? 0.3 : 0) + (siblingHeaderMatch ? 0.05 : 0);
     return { score: headerScore, found: hasInternalHeader || siblingHeaderMatch };
   }
 
@@ -481,18 +495,20 @@
     // Strong phrases (flexible matching)
     const strongPhrases = [
       'you will', 'you\'ll', 'responsibilities', 'requirements', 'qualifications',
-      'we are looking', 'we\'re looking', 'we seek', 'we need',
+      'we are looking', 'we\'re looking', 'we seek', 'we need', 'we are hiring',
       'ideal candidate', 'the right person',
       'in this role', 'for this role', 'about this role',
       'what you\'ll', 'what you will', 'what you bring',
       'key responsibilities', 'main responsibilities',
       'must have', 'must know', 'essential', 'required',
       'nice to have', 'bonus', 'preferred',
-      'about you', 'your background', 'your experience'
+      'about you', 'your background', 'your experience',
+      'passion for', 'comfortable with', 'strong communicator', 'product mindset',
+      'startup-ready', 'based in', 'if you\'re', 'join our', 'shape the'
     ];
 
     const strongMatches = strongPhrases.filter(p => text.includes(p)).length;
-    score += Math.min(strongMatches * 0.03, 0.22); // Slightly higher cap
+    score += Math.min(strongMatches * 0.04, 0.4); // Higher cap and multiplier
     if (strongMatches > 0) reasons.push(`has ${strongMatches} job phrases`);
 
     // Action verbs (strong indicator of job description)
@@ -1658,6 +1674,10 @@ Answer the question directly and naturally, as if the applicant is writing it th
 
   // Auto-extract job description on page load (kept), but do NOT auto-fill
   setTimeout(async () => {
+    // Reset detection state for new page
+    jobDescriptionFromCurrentPage = false;
+    detectedJobDescription = null;
+    
     let jd = extractJobDescription();
     const originalJdValid = isValidJobDescription(jd);
 
@@ -1671,6 +1691,8 @@ Answer the question directly and naturally, as if the applicant is writing it th
 
     if (isValidJobDescription(jd)) {
       detectedJobDescription = jd;
+      jobDescriptionFromCurrentPage = originalJdValid; // Only true if detected on current page
+      
       chrome.runtime.sendMessage({
         type: 'EXTRACT_JOB_DESCRIPTION',
         data: { text: jd.text, confidence: jd.confidence || 'medium' }
@@ -1756,7 +1778,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
         }
       }
     }, 2000);
-  }, 500);
+  }, 1000);
 
   // Calculate fit score and show floating badge (only if valid job description exists)
   async function calculateAndShowFitScore() {
@@ -2178,7 +2200,12 @@ Answer the question directly and naturally, as if the applicant is writing it th
     console.log('ResAid: Content script received message:', message.type);
     
     if (message.type === 'GET_PAGE_JOB_DESCRIPTION') {
-      sendResponse({ success: true, data: detectedJobDescription });
+      // Only return job description if it was detected on the current page (not carried over)
+      if (jobDescriptionFromCurrentPage && detectedJobDescription) {
+        sendResponse({ success: true, data: detectedJobDescription });
+      } else {
+        sendResponse({ success: false, error: 'No job description detected on this page' });
+      }
     }
     
     if (message.type === 'FILL_ACTIVE_FIELD') {
@@ -2651,7 +2678,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
           position: jobDetails.position,
           location: jobDetails.location,
           url: jobDetails.url,
-          status: 'Applied',
+          status: 'submitted',
           appliedDate: jobDetails.appliedDate,
           notes: 'Automatically tracked by ResAid',
           jobDescription: detectedJobDescription?.text || ''

@@ -102,10 +102,132 @@ document.addEventListener('DOMContentLoaded', async () => {
   apiEndpointInput.value = settings.apiEndpoint || '';
   apiKeyInput.value = settings.apiKey || '';
 
+  // Store original values for dirty state tracking
+  let originalApiSettings = {
+    apiEndpoint: apiEndpointInput.value,
+    apiKey: apiKeyInput.value
+  };
+
+  // Function to check if API settings have changed
+  function hasApiSettingsChanged() {
+    return apiEndpointInput.value.trim() !== originalApiSettings.apiEndpoint ||
+           apiKeyInput.value.trim() !== originalApiSettings.apiKey;
+  }
+
+  // Function to update save button state
+  function updateSaveButtonState() {
+    const hasChanged = hasApiSettingsChanged();
+    saveApiSettingsBtn.disabled = !hasChanged;
+    if (hasChanged) {
+      saveApiSettingsBtn.textContent = '💾 Save API Settings';
+      saveApiSettingsBtn.style.opacity = '1';
+    } else {
+      saveApiSettingsBtn.textContent = '✓ Saved';
+      saveApiSettingsBtn.style.opacity = '0.7';
+    }
+  }
+
+  // Initially disable the button since nothing has changed
+  updateSaveButtonState();
+
+  // Add change listeners to track modifications
+  apiEndpointInput.addEventListener('input', updateSaveButtonState);
+  apiKeyInput.addEventListener('input', updateSaveButtonState);
+
   // Load AI settings
   aiApiKeyInput.value = settings.aiApiKey || '';
   aiModelInput.value = settings.aiModel || 'gpt-4o-mini';
   aiToggle.checked = settings.aiEnabled !== false; // Default to true if not set
+
+  // Store original values for dirty state tracking (main settings)
+  let originalSettings = {
+    firstName: firstNameInput.value,
+    middleName: middleNameInput.value,
+    lastName: lastNameInput.value,
+    email: emailInput.value,
+    phone: phoneInput.value,
+    countryPhoneCode: countryPhoneCodeInput.value,
+    extension: extensionInput.value,
+    city: cityInput.value,
+    postalCode: postalCodeInput.value,
+    location: locationInput.value,
+    addressLine2: addressLine2Input.value,
+    country: countryInput.value,
+    province: provinceInput.value,
+    linkedin: linkedinInput.value,
+    github: githubInput.value,
+    portfolio: portfolioInput.value,
+    twitter: twitterInput.value,
+    pronouns: pronounsInput.value,
+    currentCompany: currentCompanyInput.value,
+    salary: salaryInput.value,
+    availability: availabilityInput.value,
+    workAuth: workAuthInput.value,
+    referral: referralInput.value,
+    aiApiKey: aiApiKeyInput.value,
+    aiModel: aiModelInput.value,
+    aiEnabled: aiToggle.checked
+  };
+
+  // Function to check if main settings have changed
+  function hasMainSettingsChanged() {
+    return firstNameInput.value !== originalSettings.firstName ||
+           middleNameInput.value !== originalSettings.middleName ||
+           lastNameInput.value !== originalSettings.lastName ||
+           emailInput.value !== originalSettings.email ||
+           phoneInput.value !== originalSettings.phone ||
+           countryPhoneCodeInput.value !== originalSettings.countryPhoneCode ||
+           extensionInput.value !== originalSettings.extension ||
+           cityInput.value !== originalSettings.city ||
+           postalCodeInput.value !== originalSettings.postalCode ||
+           locationInput.value !== originalSettings.location ||
+           addressLine2Input.value !== originalSettings.addressLine2 ||
+           countryInput.value !== originalSettings.country ||
+           provinceInput.value !== originalSettings.province ||
+           linkedinInput.value !== originalSettings.linkedin ||
+           githubInput.value !== originalSettings.github ||
+           portfolioInput.value !== originalSettings.portfolio ||
+           twitterInput.value !== originalSettings.twitter ||
+           pronounsInput.value !== originalSettings.pronouns ||
+           currentCompanyInput.value !== originalSettings.currentCompany ||
+           salaryInput.value !== originalSettings.salary ||
+           availabilityInput.value !== originalSettings.availability ||
+           workAuthInput.value !== originalSettings.workAuth ||
+           referralInput.value !== originalSettings.referral ||
+           aiApiKeyInput.value !== originalSettings.aiApiKey ||
+           aiModelInput.value !== originalSettings.aiModel ||
+           aiToggle.checked !== originalSettings.aiEnabled;
+  }
+
+  // Function to update main save button state
+  function updateMainSaveButtonState() {
+    const hasChanged = hasMainSettingsChanged();
+    saveBtn.disabled = !hasChanged;
+    if (hasChanged) {
+      saveBtn.textContent = 'Save Settings';
+      saveBtn.style.opacity = '1';
+    } else {
+      saveBtn.textContent = '✓ Saved';
+      saveBtn.style.opacity = '0.7';
+    }
+  }
+
+  // Initially disable the main save button since nothing has changed
+  updateMainSaveButtonState();
+
+  // Add change listeners for all main settings fields
+  const mainSettingsInputs = [
+    firstNameInput, middleNameInput, lastNameInput, emailInput, phoneInput,
+    countryPhoneCodeInput, extensionInput, cityInput, postalCodeInput, locationInput,
+    addressLine2Input, countryInput, provinceInput, linkedinInput, githubInput,
+    portfolioInput, twitterInput, pronounsInput, currentCompanyInput, salaryInput,
+    availabilityInput, workAuthInput, referralInput, aiApiKeyInput, aiModelInput
+  ];
+
+  mainSettingsInputs.forEach(input => {
+    input.addEventListener('input', updateMainSaveButtonState);
+  });
+  aiToggle.addEventListener('change', updateMainSaveButtonState);
 
   // Get API Key button
   getApiKeyBtn.addEventListener('click', () => {
@@ -171,18 +293,32 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Save API Settings button (saves only API endpoint and key)
   saveApiSettingsBtn.addEventListener('click', async () => {
+    // Add loading state with smooth transition
+    saveApiSettingsBtn.style.opacity = '0.7';
     saveApiSettingsBtn.textContent = '⏳ Saving...';
     saveApiSettingsBtn.disabled = true;
 
     try {
+      const newEndpoint = apiEndpointInput.value.trim();
+      const newApiKey = apiKeyInput.value.trim();
+
       await chrome.storage.sync.set({
-        apiEndpoint: apiEndpointInput.value.trim(),
-        apiKey: apiKeyInput.value.trim()
+        apiEndpoint: newEndpoint,
+        apiKey: newApiKey
       });
+
+      // Update original values to reflect the saved state
+      originalApiSettings = {
+        apiEndpoint: newEndpoint,
+        apiKey: newApiKey
+      };
 
       status.className = 'status success';
       status.textContent = '✓ API settings saved successfully!';
       status.style.display = 'block';
+      
+      // Update button state to show saved
+      updateSaveButtonState();
       
       setTimeout(() => {
         status.style.display = 'none';
@@ -193,9 +329,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       status.style.color = '#c62828';
       status.style.display = 'block';
       status.textContent = '❌ Failed to save API settings: ' + error.message;
-    } finally {
-      saveApiSettingsBtn.textContent = '💾 Save API Settings';
-      saveApiSettingsBtn.disabled = false;
+      
+      // Re-enable button on error
+      updateSaveButtonState();
     }
   });
 
@@ -352,43 +488,92 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Save settings
   saveBtn.addEventListener('click', async () => {
-    await chrome.storage.sync.set({
-      firstName: firstNameInput.value.trim(),
-      middleName: middleNameInput.value.trim(),
-      lastName: lastNameInput.value.trim(),
-      email: emailInput.value.trim(),
-      phone: phoneInput.value.trim(),
-      countryPhoneCode: countryPhoneCodeInput.value.trim(),
-      extension: extensionInput.value.trim(),
-      city: cityInput.value.trim(),
-      postalCode: postalCodeInput.value.trim(),
-      location: locationInput.value.trim(),
-      addressLine2: addressLine2Input.value.trim(),
-      country: countryInput.value.trim(),
-      province: provinceInput.value.trim(),
-      linkedin: linkedinInput.value.trim(),
-      github: githubInput.value.trim(),
-      portfolio: portfolioInput.value.trim(),
-      twitter: twitterInput.value.trim(),
-      pronouns: pronounsInput.value.trim(),
-      currentCompany: currentCompanyInput.value.trim(),
-      salary: salaryInput.value.trim(),
-      availability: availabilityInput.value.trim(),
-      workAuth: workAuthInput.value.trim(),
-      referral: referralInput.value.trim(),
-      apiEndpoint: apiEndpointInput.value.trim(),
-      apiKey: apiKeyInput.value.trim(),
-      aiApiKey: aiApiKeyInput.value.trim(),
-      aiModel: aiModelInput.value,
-      aiEnabled: aiToggle.checked
-    });
+    saveBtn.textContent = '⏳ Saving...';
+    saveBtn.disabled = true;
+    saveBtn.style.opacity = '0.7';
 
-    status.className = 'status success';
-    status.textContent = '✓ Settings saved successfully!';
-    
-    setTimeout(() => {
-      status.style.display = 'none';
-    }, 3000);
+    try {
+      await chrome.storage.sync.set({
+        firstName: firstNameInput.value.trim(),
+        middleName: middleNameInput.value.trim(),
+        lastName: lastNameInput.value.trim(),
+        email: emailInput.value.trim(),
+        phone: phoneInput.value.trim(),
+        countryPhoneCode: countryPhoneCodeInput.value.trim(),
+        extension: extensionInput.value.trim(),
+        city: cityInput.value.trim(),
+        postalCode: postalCodeInput.value.trim(),
+        location: locationInput.value.trim(),
+        addressLine2: addressLine2Input.value.trim(),
+        country: countryInput.value.trim(),
+        province: provinceInput.value.trim(),
+        linkedin: linkedinInput.value.trim(),
+        github: githubInput.value.trim(),
+        portfolio: portfolioInput.value.trim(),
+        twitter: twitterInput.value.trim(),
+        pronouns: pronounsInput.value.trim(),
+        currentCompany: currentCompanyInput.value.trim(),
+        salary: salaryInput.value.trim(),
+        availability: availabilityInput.value.trim(),
+        workAuth: workAuthInput.value.trim(),
+        referral: referralInput.value.trim(),
+        apiEndpoint: apiEndpointInput.value.trim(),
+        apiKey: apiKeyInput.value.trim(),
+        aiApiKey: aiApiKeyInput.value.trim(),
+        aiModel: aiModelInput.value,
+        aiEnabled: aiToggle.checked
+      });
+
+      // Update original values to reflect the saved state
+      originalSettings = {
+        firstName: firstNameInput.value,
+        middleName: middleNameInput.value,
+        lastName: lastNameInput.value,
+        email: emailInput.value,
+        phone: phoneInput.value,
+        countryPhoneCode: countryPhoneCodeInput.value,
+        extension: extensionInput.value,
+        city: cityInput.value,
+        postalCode: postalCodeInput.value,
+        location: locationInput.value,
+        addressLine2: addressLine2Input.value,
+        country: countryInput.value,
+        province: provinceInput.value,
+        linkedin: linkedinInput.value,
+        github: githubInput.value,
+        portfolio: portfolioInput.value,
+        twitter: twitterInput.value,
+        pronouns: pronounsInput.value,
+        currentCompany: currentCompanyInput.value,
+        salary: salaryInput.value,
+        availability: availabilityInput.value,
+        workAuth: workAuthInput.value,
+        referral: referralInput.value,
+        aiApiKey: aiApiKeyInput.value,
+        aiModel: aiModelInput.value,
+        aiEnabled: aiToggle.checked
+      };
+
+      status.className = 'status success';
+      status.textContent = '✓ Settings saved successfully!';
+      status.style.display = 'block';
+      
+      // Update button state to show saved
+      updateMainSaveButtonState();
+      
+      setTimeout(() => {
+        status.style.display = 'none';
+      }, 3000);
+    } catch (error) {
+      status.className = 'status';
+      status.style.background = '#ffebee';
+      status.style.color = '#c62828';
+      status.style.display = 'block';
+      status.textContent = '❌ Failed to save settings: ' + error.message;
+      
+      // Re-enable button on error
+      updateMainSaveButtonState();
+    }
   });
 
   // AI API calling function

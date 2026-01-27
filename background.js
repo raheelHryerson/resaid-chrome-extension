@@ -270,7 +270,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         company: message.data.company,
         position: message.data.position,
         matchScore: message.data.matchScore,
-        status: message.data.status,
+        status: message.data.status || 'submitted',
         notes: message.data.notes,
         dateAdded: new Date().toISOString(),
         dateModified: new Date().toISOString(),
