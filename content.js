@@ -2223,6 +2223,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
       console.log('ResAid: TRIGGER_AUTOFILL message received, calling autoFillCommonFields()');
       (async () => {
         const filled = await autoFillCommonFields();
+        console.log('ResAid: Smart Apply filled fields:', filled);
         await armSmartApplyTracking();
         await trackSmartApplyIfFilled(filled);
         sendResponse({ success: true, filled });
@@ -2234,6 +2235,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
       console.log('ResAid: SMART_FILL message received, calling autoFillCommonFields()');
       (async () => {
         const filled = await autoFillCommonFields();
+        console.log('ResAid: Smart Apply filled fields:', filled);
         await armSmartApplyTracking();
         await trackSmartApplyIfFilled(filled);
         sendResponse({ success: true, filled });
@@ -2247,6 +2249,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
       const profileData = message.profileData;
       (async () => {
         const filled = await autoFillCommonFields(profileData);
+        console.log('ResAid: Smart Apply filled fields:', filled);
         await armSmartApplyTracking();
         await trackSmartApplyIfFilled(filled);
         sendResponse({ success: true, filled });

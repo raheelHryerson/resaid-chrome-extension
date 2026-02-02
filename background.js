@@ -298,6 +298,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'SAVE_APPLICATION') {
+    console.log('ResAid: SAVE_APPLICATION received', {
+      company: message.data.company,
+      position: message.data.position,
+      url: message.data.url
+    });
     // Save application to local storage for tracker
     chrome.storage.local.get(['applications'], async (result) => {
       const applications = result.applications || [];
@@ -319,6 +324,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Also sync to website if API settings are configured
       try {
         const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+        console.log('ResAid: Sync settings', { hasEndpoint: !!settings.apiEndpoint, hasApiKey: !!settings.apiKey });
         if (settings.apiEndpoint && settings.apiKey) {
           // Send to website API
           const response = await fetch(`${settings.apiEndpoint}/api/applications`, {
@@ -339,7 +345,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (response.ok) {
             console.log('ResAid: Application synced to website successfully');
           } else {
-            console.log('ResAid: Failed to sync application to website:', response.status);
+            const errorText = await response.text();
+            console.log('ResAid: Failed to sync application to website:', response.status, errorText);
           }
         }
       } catch (error) {
