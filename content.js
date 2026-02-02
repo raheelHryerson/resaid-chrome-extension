@@ -118,6 +118,7 @@
   // State
   let detectedJobDescription = null;
   let jobDescriptionFromCurrentPage = false;
+  let successCheckInFlight = false;
   let activeField = null;
   let personalInfo = null;
 
@@ -1670,6 +1671,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
         }
       }
     }
+    return filled;
   }
 
   // Auto-extract job description on page load (kept), but do NOT auto-fill
@@ -2219,57 +2221,37 @@ Answer the question directly and naturally, as if the applicant is writing it th
 
     if (message.type === 'TRIGGER_AUTOFILL') {
       console.log('ResAid: TRIGGER_AUTOFILL message received, calling autoFillCommonFields()');
-      autoFillCommonFields();
-      sendResponse({ success: true });
+      (async () => {
+        const filled = await autoFillCommonFields();
+        await armSmartApplyTracking();
+        await trackSmartApplyIfFilled(filled);
+        sendResponse({ success: true, filled });
+      })();
+      return true;
     }
 
     if (message.type === 'SMART_FILL') {
       console.log('ResAid: SMART_FILL message received, calling autoFillCommonFields()');
-      autoFillCommonFields();
-      sendResponse({ success: true });
+      (async () => {
+        const filled = await autoFillCommonFields();
+        await armSmartApplyTracking();
+        await trackSmartApplyIfFilled(filled);
+        sendResponse({ success: true, filled });
+      })();
+      return true;
     }
     
     if (message.type === 'AUTOFILL_COMMON_FIELDS') {
       console.log('ResAid: AUTOFILL_COMMON_FIELDS message received, calling autoFillCommonFields()');
       // Use profile data from message if provided, otherwise load from storage
       const profileData = message.profileData;
-      autoFillCommonFields(profileData);
-      
-      // Auto-save to application tracker if this looks like a job application
-      const jobDetails = extractJobDetails();
-      const isJobPage = isLikelyJobApplicationPage();
-      
-      if (isJobPage || detectedJobDescription) {
-        console.log('ResAid: Auto-tracking application via Smart Fill', {
-          isJobPage,
-          hasJobDescription: !!detectedJobDescription,
-          jobDetails
-        });
-        
-        const jobTitle = detectedJobDescription?.text?.split('\n')[0] || jobDetails.position || document.title || 'Job Position';
-        const companyName = extractCompanyName(document.body.innerText || '') || jobDetails.company || 'Unknown Company';
-        const matchScore = detectedJobDescription ? Math.round((detectedJobDescription.confidence || 0.5) * 100) : 0;
-        
-        chrome.runtime.sendMessage({
-          type: 'SAVE_APPLICATION',
-          data: {
-            company: companyName,
-            position: jobTitle,
-            location: jobDetails.location,
-            url: window.location.href,
-            matchScore: matchScore,
-            status: 'Applied',
-            appliedDate: new Date().toISOString(),
-            notes: 'Tracked via Smart Fill'
-          }
-        }).catch((error) => {
-          console.log('ResAid: Failed to save application via Smart Fill:', error);
-        });
-      } else {
-        console.log('ResAid: Smart Fill used but page not detected as job application');
-      }
-      
-      sendResponse({ success: true });
+      (async () => {
+        const filled = await autoFillCommonFields(profileData);
+        await armSmartApplyTracking();
+        await trackSmartApplyIfFilled(filled);
+        sendResponse({ success: true, filled });
+      })();
+      return true;
     }
 
     if (message.type === 'SCORE_RESUME_JOB_MATCH') {
@@ -2485,36 +2467,71 @@ Answer the question directly and naturally, as if the applicant is writing it th
   
   // Check if application was successfully submitted
   function checkForApplicationSuccess() {
-    const url = window.location.href.toLowerCase();
-    const title = document.title.toLowerCase();
-    const bodyText = document.body?.textContent?.toLowerCase() || '';
-    
-    // Success URL patterns
-    const successUrlPatterns = [
-      /success/i, /thank.?you/i, /submitted/i, /confirmed/i, /complete/i,
-      /applied/i, /application.?received/i, /next.?steps/i
-    ];
-    
-    // Success content patterns
-    const successContentPatterns = [
-      /application.*submitted/i, /thank.*applying/i, /application.*received/i,
-      /successfully.*applied/i, /application.*confirmed/i, /next.*steps/i,
-      /we.*received.*application/i, /application.*complete/i
-    ];
-    
-    const isSuccessPage = 
-      successUrlPatterns.some(pattern => pattern.test(url)) ||
-      successUrlPatterns.some(pattern => pattern.test(title)) ||
-      successContentPatterns.some(pattern => pattern.test(bodyText));
-    
-    if (isSuccessPage) {
-      console.log('🎉 Application success detected!');
-      showApplicationTrackingDialog();
-    }
-  }
+  return;
+  if (successCheckInFlight) return;
+  successCheckInFlight = true;
+
+  const url = window.location.href.toLowerCase();
+  const title = document.title.toLowerCase();
+  const bodyText = document.body?.textContent?.toLowerCase() || '';
   
-  // Show dialog to track the application
-  function showApplicationTrackingDialog() {
+  // Success URL patterns
+  const successUrlPatterns = [
+    /success/i, /thank.?you/i, /submitted/i, /confirmed/i, /complete/i,
+    /applied/i, /application.?received/i, /next.?steps/i
+  ];
+  
+  // Success content patterns
+  const successContentPatterns = [
+    /application.*submitted/i, /thank.*applying/i, /application.*received/i,
+    /successfully.*applied/i, /application.*confirmed/i, /next.*steps/i,
+    /we.*received.*application/i, /application.*complete/i
+  ];
+  
+  const isSuccessPage = 
+    successUrlPatterns.some(pattern => pattern.test(url)) ||
+    successUrlPatterns.some(pattern => pattern.test(title)) ||
+    successContentPatterns.some(pattern => pattern.test(bodyText));
+  
+  if (isSuccessPage) {
+    chrome.runtime.sendMessage({ type: 'GET_SMART_APPLY_CONTEXT' }).then((smartApplyContext) => {
+      const context = smartApplyContext?.data || null;
+      if (!context || !context.timestamp || (Date.now() - context.timestamp) > (30 * 60 * 1000)) {
+        if (context?.timestamp) {
+          chrome.runtime.sendMessage({ type: 'CLEAR_SMART_APPLY_CONTEXT' });
+        }
+        successCheckInFlight = false;
+        return;
+      }
+
+      console.log('?? Application success detected after Smart Apply!');
+      const jobDetails = extractJobDetails();
+      const jobTitle = context.jobTitle || detectedJobDescription?.text?.split('\n')[0] || jobDetails.position || document.title || 'Job Position';
+      const companyName = context.companyName || extractCompanyName(document.body.innerText || '') || jobDetails.company || 'Unknown Company';
+      const jobUrl = context.jobUrl || jobDetails.url || window.location.href;
+      const matchScore = detectedJobDescription ? Math.round((detectedJobDescription.confidence || 0.5) * 100) : 0;
+
+      trackApplication({
+        company: companyName,
+        position: jobTitle,
+        location: context.location || jobDetails.location,
+        url: jobUrl,
+        appliedDate: new Date().toISOString(),
+        matchScore: matchScore,
+        jobDescription: context.jobDescription || detectedJobDescription?.text || ''
+      });
+
+      chrome.runtime.sendMessage({ type: 'CLEAR_SMART_APPLY_CONTEXT' });
+      successCheckInFlight = false;
+    }).catch((error) => {
+      console.log('ResAid: Error handling smart apply success:', error);
+      successCheckInFlight = false;
+    });
+  } else {
+    successCheckInFlight = false;
+  }
+}
+function showApplicationTrackingDialog() {
     // Prevent multiple dialogs
     if (document.querySelector('.resaid-tracking-dialog')) return;
     
@@ -2607,6 +2624,10 @@ Answer the question directly and naturally, as if the applicant is writing it th
     let company = '';
     let position = '';
     let location = '';
+
+    const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content') || '';
+    const ogSiteName = document.querySelector('meta[property="og:site_name"]')?.getAttribute('content') || '';
+    const h1Text = document.querySelector('h1')?.textContent?.trim() || '';
     
     // Common patterns: "Company - Position" or "Position at Company"
     const titlePatterns = [
@@ -2628,6 +2649,30 @@ Answer the question directly and naturally, as if the applicant is writing it th
         }
         break;
       }
+    }
+
+    if ((!company || !position) && ogTitle) {
+      for (const pattern of titlePatterns) {
+        const match = ogTitle.match(pattern);
+        if (match) {
+          if (ogTitle.toLowerCase().includes(' at ')) {
+            position = position || match[1].trim();
+            company = company || match[2].trim();
+          } else {
+            company = company || match[1].trim();
+            position = position || match[2].trim();
+          }
+          break;
+        }
+      }
+    }
+
+    if (!position && h1Text) {
+      position = h1Text;
+    }
+
+    if (!company && ogSiteName) {
+      company = ogSiteName.trim();
     }
     
     // If no match, try to extract from URL
@@ -2664,6 +2709,58 @@ Answer the question directly and naturally, as if the applicant is writing it th
       appliedDate: new Date().toISOString()
     };
   }
+
+  async function armSmartApplyTracking() {
+    try {
+      const jobDetails = extractJobDetails();
+      const lastJobDescription = await chrome.runtime.sendMessage({ type: 'GET_LAST_JOB_DESCRIPTION' });
+      const jdData = lastJobDescription?.data || null;
+
+      chrome.runtime.sendMessage({
+        type: 'SET_SMART_APPLY_CONTEXT',
+        data: {
+          jobTitle: jobDetails.position,
+          companyName: jobDetails.company,
+          location: jobDetails.location,
+          jobUrl: jdData?.url || jobDetails.url,
+          jobDescription: jdData?.text || detectedJobDescription?.text || '',
+          sourceUrl: jdData?.url || null
+        }
+      });
+    } catch (error) {
+      console.log('ResAid: Failed to arm smart apply tracking:', error);
+    }
+  }
+
+  async function trackSmartApplyIfFilled(filledCount) {
+    if (!filledCount || filledCount < 1) {
+      console.log('ResAid: Smart Apply did not fill any fields, skipping tracking');
+      return;
+    }
+
+    const jobDetails = extractJobDetails();
+    const lastJobDescription = await chrome.runtime.sendMessage({ type: 'GET_LAST_JOB_DESCRIPTION' });
+    const jdData = lastJobDescription?.data || null;
+    const jdFresh = jdData?.timestamp ? (Date.now() - jdData.timestamp) < (30 * 60 * 1000) : false;
+
+    const jobUrl = jdFresh && jdData?.url ? jdData.url : jobDetails.url;
+    const jobDescription = jdFresh && jdData?.text ? jdData.text : (detectedJobDescription?.text || '');
+    const jobTitle = (jdFresh && jdData?.text)
+      ? jdData.text.split('\n')[0]?.trim()
+      : (jobDetails.position || document.title || 'Job Position');
+    const companyName = extractCompanyName(document.body.innerText || '') || jobDetails.company || 'Unknown Company';
+    const matchScore = detectedJobDescription ? Math.round((detectedJobDescription.confidence || 0.5) * 100) : 0;
+
+    trackApplication({
+      company: companyName,
+      position: jobTitle,
+      location: jobDetails.location,
+      url: jobUrl,
+      appliedDate: new Date().toISOString(),
+      matchScore: matchScore,
+      jobDescription: jobDescription
+    });
+  }
   
   // Save application to local storage
   async function trackApplication(jobDetails) {
@@ -2678,10 +2775,10 @@ Answer the question directly and naturally, as if the applicant is writing it th
           position: jobDetails.position,
           location: jobDetails.location,
           url: jobDetails.url,
-          status: 'submitted',
+          status: 'applied',
           appliedDate: jobDetails.appliedDate,
           notes: 'Automatically tracked by ResAid',
-          jobDescription: detectedJobDescription?.text || ''
+          jobDescription: jobDetails.jobDescription || detectedJobDescription?.text || ''
         }
       });
       

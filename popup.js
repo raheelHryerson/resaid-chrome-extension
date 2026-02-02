@@ -227,6 +227,61 @@ function displaySkillsGap(scoreData) {
   }
 }
 
+// Animate score meter and reveal fit score section
+function animateScoreMeter(score) {
+  const scoreValue = document.getElementById('scoreValue');
+  const scoreCircle = document.getElementById('scoreCircle');
+  const fitScoreContainer = document.getElementById('fitScoreContainer');
+  if (!scoreValue || !scoreCircle || !fitScoreContainer) return;
+
+  const numericScore = Number(score);
+  const clampedScore = Math.max(0, Math.min(100, Number.isFinite(numericScore) ? numericScore : 0));
+  const targetScore = Math.round(clampedScore);
+
+  fitScoreContainer.classList.add('visible');
+
+  const circumference = 440;
+  const targetOffset = circumference * (1 - targetScore / 100);
+  const startOffset = Number.parseFloat(scoreCircle.style.strokeDashoffset) || circumference;
+  const startScore = Number.parseFloat(scoreValue.textContent) || 0;
+  const durationMs = 900;
+  const startTime = performance.now();
+
+  function step(now) {
+    const progress = Math.min(1, (now - startTime) / durationMs);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const currentOffset = startOffset + (targetOffset - startOffset) * eased;
+    const currentScore = Math.round(startScore + (targetScore - startScore) * eased);
+
+    scoreCircle.style.strokeDasharray = `${circumference}`;
+    scoreCircle.style.strokeDashoffset = `${currentOffset}`;
+    scoreValue.textContent = `${currentScore}%`;
+
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    }
+  }
+
+  requestAnimationFrame(step);
+}
+
+function buildDashboardUrl(endpoint, tab) {
+  if (!endpoint) return null;
+  const trimmed = endpoint.replace(/\/+$/, '');
+  return `${trimmed}/dashboard?tab=${encodeURIComponent(tab)}`;
+}
+
+async function openDashboardApplicationsTab() {
+  const settings = await chrome.storage.sync.get(['apiEndpoint']);
+  const dashboardUrl = buildDashboardUrl(settings.apiEndpoint, 'applications');
+  if (!dashboardUrl) {
+    chrome.runtime.openOptionsPage();
+    alert('Set your API endpoint in Extension Settings to open your ResAid dashboard.');
+    return;
+  }
+  chrome.tabs.create({ url: dashboardUrl });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const jobStatus = document.getElementById('jobStatus');
   const refreshJobBtn = document.getElementById('refreshJobBtn');
@@ -249,8 +304,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Tracker button
   openTrackerBtn.addEventListener('click', () => {
-    const trackerUrl = chrome.runtime.getURL('tracker.html');
-    chrome.tabs.create({ url: trackerUrl });
+    openDashboardApplicationsTab();
   });
 
   // Pin popup button
@@ -672,7 +726,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // View all applications
   viewAllApplications.addEventListener('click', () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('applications.html') });
+    openDashboardApplicationsTab();
   });
   
   // Load recent applications

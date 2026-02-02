@@ -182,6 +182,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'SET_SMART_APPLY_CONTEXT') {
+    const tabId = sender.tab?.id;
+    if (tabId) {
+      chrome.storage.local.set({
+        [`smartApply_${tabId}`]: {
+          ...message.data,
+          tabId,
+          timestamp: Date.now()
+        }
+      });
+    }
+    sendResponse({ success: true });
+    return true;
+  }
+
+  if (message.type === 'GET_SMART_APPLY_CONTEXT') {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResponse({ success: true, data: null });
+      return true;
+    }
+    chrome.storage.local.get([`smartApply_${tabId}`], (result) => {
+      sendResponse({ success: true, data: result[`smartApply_${tabId}`] || null });
+    });
+    return true;
+  }
+
+  if (message.type === 'CLEAR_SMART_APPLY_CONTEXT') {
+    const tabId = sender.tab?.id;
+    if (tabId) {
+      chrome.storage.local.remove([`smartApply_${tabId}`]);
+    }
+    sendResponse({ success: true });
+    return true;
+  }
+
   if (message.type === 'GET_LAST_JOB_DESCRIPTION') {
     chrome.storage.local.get(['jobDescription_last'], (result) => {
       sendResponse({ success: true, data: result.jobDescription_last || null });
