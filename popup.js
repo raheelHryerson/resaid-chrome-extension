@@ -1,6 +1,8 @@
 // Popup script - Simple, professional interface for ResAid
 
 let currentTab = null;
+let isPremiumUser = false;
+let lastPremiumAnalysisKey = null;
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async function() {
@@ -282,6 +284,125 @@ async function openDashboardApplicationsTab() {
   chrome.tabs.create({ url: dashboardUrl });
 }
 
+async function openDashboardUpgrade() {
+  const settings = await chrome.storage.sync.get(['apiEndpoint']);
+  if (!settings.apiEndpoint) {
+    chrome.runtime.openOptionsPage();
+    return;
+  }
+  const trimmed = settings.apiEndpoint.replace(/\/+$/, '');
+  chrome.tabs.create({ url: `${trimmed}/pricing` });
+}
+
+async function getSubscriptionStatus() {
+  try {
+    const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+    if (!settings.apiEndpoint || !settings.apiKey) return false;
+    const response = await fetch(`${settings.apiEndpoint}/api/subscription/check`, {
+      headers: {
+        'Authorization': `Bearer ${settings.apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data.status && data.status !== 'free';
+  } catch (error) {
+    console.log('ResAid: Failed to fetch subscription status:', error);
+    return false;
+  }
+}
+
+function updatePremiumUI(isPremium) {
+  const breakdown = document.getElementById('scoreBreakdownSection');
+  const locked = document.getElementById('premiumLocked');
+  const analysis = document.getElementById('premiumAnalysisSection');
+
+  if (breakdown) breakdown.style.display = isPremium ? 'block' : 'none';
+  if (locked) locked.style.display = isPremium ? 'none' : 'block';
+  if (analysis) analysis.style.display = isPremium ? 'block' : 'none';
+}
+
+function buildPremiumPrompt(jobDescription, resumeText, scoreData) {
+  const scoreSummary = scoreData?.scoreComponents
+    ? `Score components: Skills Match ${scoreData.scoreComponents.skillsMatch}%, Experience ${scoreData.scoreComponents.experienceRelevance}%, Role Alignment ${scoreData.scoreComponents.roleAlignment}%.`
+    : '';
+
+  return `Assume you are an expert resume writer with 20 years of experience helping tech professionals land their dream job at Google, Amazon, and other FAANG companies.
+
+Analyze the resume against the job description and explain what is weak or missing. Follow the rules:
+- See if the bulleted points clearly show a connection between the skills/experience and the job's preferred/basic qualifications.
+- List relevant accomplishments or significant tasks performed that are most closely related to the job I am applying for.
+- Highlight relevant transferable skills.
+- Do not put company names or dates.
+- Do not include skills and experience that aren't supported by the resume.
+- Please don't utilize an Em-Dash unless it is the only grammatically correct option.
+
+Output format:
+1) Key gaps (bullet list)
+2) Missing evidence from the resume (bullet list)
+3) What to emphasize or add (bullet list)
+
+${scoreSummary}
+
+Resume:
+${resumeText ? resumeText.substring(0, 6000) : ''}
+
+Job Description:
+${jobDescription ? jobDescription.substring(0, 6000) : ''}`;
+}
+
+async function generatePremiumAnalysis(jobDescriptionText, scoreData) {
+  if (!isPremiumUser) return;
+  const premiumText = document.getElementById('premiumAnalysisText');
+  if (!premiumText) return;
+
+  const settings = await chrome.storage.sync.get(['aiApiKey', 'aiModel', 'aiEnabled']);
+  if (!settings.aiApiKey || settings.aiEnabled === false) {
+    premiumText.textContent = 'Add an AI API key in settings to generate the premium explanation.';
+    return;
+  }
+
+  const resumeResponse = await chrome.runtime.sendMessage({ type: 'LOAD_RESUME_DATA' });
+  const resumeText = resumeResponse?.success ? resumeResponse.data : '';
+  if (!resumeText || !jobDescriptionText) {
+    premiumText.textContent = 'Need both a resume and a job description to generate the premium explanation.';
+    return;
+  }
+
+  const prompt = buildPremiumPrompt(jobDescriptionText, resumeText, scoreData);
+  premiumText.textContent = 'Generating explanation...';
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${settings.aiApiKey}`
+      },
+      body: JSON.stringify({
+        model: settings.aiModel || 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        max_tokens: 600
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      premiumText.textContent = `Failed to generate explanation: ${response.status} ${errorText}`;
+      return;
+    }
+
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content?.trim() || '';
+    premiumText.textContent = content || 'No explanation returned.';
+  } catch (error) {
+    premiumText.textContent = 'Error generating premium explanation.';
+    console.error('ResAid: Premium analysis error:', error);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const jobStatus = document.getElementById('jobStatus');
   const refreshJobBtn = document.getElementById('refreshJobBtn');
@@ -289,6 +410,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const syncProfileBtn = document.getElementById('syncProfileBtn');
   const settingsLink = document.getElementById('settingsLink');
   const openTrackerBtn = document.getElementById('openTrackerBtn');
+  const premiumUpgradeBtn = document.getElementById('premiumUpgradeBtn');
+  const refreshPremiumAnalysis = document.getElementById('refreshPremiumAnalysis');
 
   // AI status elements
   const aiStatus = document.getElementById('aiStatus');
@@ -296,6 +419,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let currentTab = null;
   let jobDescription = null;
+  let lastScoreData = null;
+  let lastJobDescriptionText = '';
   // Backend API key removed. All data now uses local storage.
 
   // Get current tab
@@ -306,6 +431,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   openTrackerBtn.addEventListener('click', () => {
     openDashboardApplicationsTab();
   });
+
+  if (premiumUpgradeBtn) {
+    premiumUpgradeBtn.addEventListener('click', () => {
+      openDashboardUpgrade();
+    });
+  }
+
+  if (refreshPremiumAnalysis) {
+    refreshPremiumAnalysis.addEventListener('click', () => {
+      generatePremiumAnalysis(lastJobDescriptionText, lastScoreData);
+    });
+  }
 
   // Pin popup button
   const pinPopupBtn = document.getElementById('pinPopup');
@@ -696,11 +833,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Animate and display score
         animateScoreMeter(scoreResult.data.overallScore);
         displayScoreBreakdown(scoreResult.data);
+        lastScoreData = scoreResult.data;
+        lastJobDescriptionText = jobDescription?.text || '';
+        updatePremiumUI(isPremiumUser);
+
+        if (isPremiumUser && lastJobDescriptionText) {
+          const analysisKey = `${lastJobDescriptionText.substring(0, 200)}|${scoreResult.data.overallScore}`;
+          if (lastPremiumAnalysisKey !== analysisKey) {
+            lastPremiumAnalysisKey = analysisKey;
+            generatePremiumAnalysis(lastJobDescriptionText, lastScoreData);
+          }
+        }
       }
     } catch (err) {
       console.error('Error calculating fit score:', err);
     }
   }
+
+  isPremiumUser = await getSubscriptionStatus();
+  updatePremiumUI(isPremiumUser);
 });
 
 // ===== APPLICATIONS TRACKER =====

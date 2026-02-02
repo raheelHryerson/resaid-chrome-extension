@@ -260,6 +260,44 @@
       line-height: 1.5;
     }
 
+    .premium-locked {
+      margin-top: 12px;
+      padding: 12px;
+      background: #f5f5f5;
+      border: 1px dashed #bbb;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #555;
+      text-align: left;
+    }
+
+    .premium-locked strong {
+      color: #2328b8;
+    }
+
+    .premium-analysis {
+      margin-top: 12px;
+      padding: 12px;
+      background: #eef2ff;
+      border-radius: 8px;
+      border: 1px solid #c7d2fe;
+      text-align: left;
+    }
+
+    .premium-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #1f2a72;
+      margin-bottom: 6px;
+    }
+
+    .premium-text {
+      font-size: 12px;
+      color: #333;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
     .insight-item {
       margin: 4px 0;
       padding: 4px 8px;
@@ -387,32 +425,45 @@
           </defs>
         </svg>
         
-        <div class="score-text">
-          <div id="scoreValue" class="score-value">--</div>
-          <div class="score-subtitle">Match</div>
+      <div class="score-text">
+        <div id="scoreValue" class="score-value">--</div>
+        <div class="score-subtitle">Match</div>
+      </div>
+    </div>
+
+      <div id="scoreBreakdownSection">
+        <div class="score-breakdown">
+          <div class="breakdown-item">
+            <span class="breakdown-label">Skills Match</span>
+            <span id="skillsScore" class="breakdown-value">--</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Experience</span>
+            <span id="expScore" class="breakdown-value">--</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Role Alignment</span>
+            <span id="roleScore" class="breakdown-value">--</span>
+          </div>
+        </div>
+
+        <div id="scoreInsights" class="score-insights"></div>
+
+        <div id="skillsGapSection" class="skills-gap-section" style="display: none;">
+          <div class="gap-title">Skills to Add</div>
+          <div id="skillsGapList"></div>
         </div>
       </div>
 
-      <div class="score-breakdown">
-        <div class="breakdown-item">
-          <span class="breakdown-label">Skills Match</span>
-          <span id="skillsScore" class="breakdown-value">--</span>
-        </div>
-        <div class="breakdown-item">
-          <span class="breakdown-label">Experience</span>
-          <span id="expScore" class="breakdown-value">--</span>
-        </div>
-        <div class="breakdown-item">
-          <span class="breakdown-label">Role Alignment</span>
-          <span id="roleScore" class="breakdown-value">--</span>
-        </div>
+      <div id="premiumLocked" class="premium-locked" style="display: none;">
+        <strong>Premium:</strong> Unlock the full fit score breakdown and detailed resume‑to‑job explanations.
+        <button id="premiumUpgradeBtn" class="small-btn" style="margin-top: 8px;">Upgrade on Dashboard</button>
       </div>
 
-      <div id="scoreInsights" class="score-insights"></div>
-
-      <div id="skillsGapSection" class="skills-gap-section" style="display: none;">
-        <div class="gap-title">Skills to Add</div>
-        <div id="skillsGapList"></div>
+      <div id="premiumAnalysisSection" class="premium-analysis" style="display: none;">
+        <div class="premium-title">Premium Fit Explanation</div>
+        <div id="premiumAnalysisText" class="premium-text">Generate a detailed explanation for this match.</div>
+        <button id="refreshPremiumAnalysis" class="small-btn">Generate Explanation</button>
       </div>
 
       <button id="openTrackerBtn" class="tracker-link" style="margin-top: 10px;">Open Application Tracker</button>
