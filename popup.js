@@ -852,6 +852,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   isPremiumUser = await getSubscriptionStatus();
   updatePremiumUI(isPremiumUser);
+
+  if (isPremiumUser && lastJobDescriptionText && lastScoreData) {
+    const analysisKey = `${lastJobDescriptionText.substring(0, 200)}|${lastScoreData.overallScore}`;
+    if (lastPremiumAnalysisKey !== analysisKey) {
+      lastPremiumAnalysisKey = analysisKey;
+      generatePremiumAnalysis(lastJobDescriptionText, lastScoreData);
+    }
+  }
 });
 
 // ===== APPLICATIONS TRACKER =====

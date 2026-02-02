@@ -1812,8 +1812,27 @@ Answer the question directly and naturally, as if the applicant is writing it th
     }
   }
 
+  async function getSubscriptionStatus() {
+    try {
+      const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
+      if (!settings.apiEndpoint || !settings.apiKey) return false;
+      const response = await fetch(`${settings.apiEndpoint}/api/subscription/check`, {
+        headers: {
+          'Authorization': `Bearer ${settings.apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!response.ok) return false;
+      const data = await response.json();
+      return data.status && data.status !== 'free';
+    } catch (error) {
+      console.log('ResAid: Failed to fetch subscription status:', error);
+      return false;
+    }
+  }
+
   // Show detailed fit score modal with pie chart
-  function showFitScoreModal(scoreData) {
+  async function showFitScoreModal(scoreData) {
     // Remove existing modal only (keep badge visible)
     const existingModal = document.getElementById('resaid-fit-modal');
     if (existingModal) existingModal.remove();
@@ -1834,6 +1853,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     `;
 
+    const isPremiumUser = await getSubscriptionStatus();
     const score = scoreData.overallScore;
     const color = score >= 75 ? '#4CAF50' : score >= 50 ? '#FF9800' : '#f44336';
 
@@ -1870,38 +1890,40 @@ Answer the question directly and naturally, as if the applicant is writing it th
           <canvas id="resaid-pie-chart" width="200" height="200" style="display: block; margin: 0 auto;"></canvas>
         </div>
 
-        <div style="margin-bottom: 20px;">
-          <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Score Breakdown</div>
-          ${pieData.map(item => `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <div style="display: flex; align-items: center;">
-                <div style="width: 12px; height: 12px; background: ${item.color}; border-radius: 2px; margin-right: 8px;"></div>
-                <span style="font-size: 13px; color: #555;">${item.label}</span>
+        ${isPremiumUser ? `
+          <div style="margin-bottom: 20px;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Score Breakdown</div>
+            ${pieData.map(item => `
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center;">
+                  <div style="width: 12px; height: 12px; background: ${item.color}; border-radius: 2px; margin-right: 8px;"></div>
+                  <span style="font-size: 13px; color: #555;">${item.label}</span>
+                </div>
+                <div style="font-size: 13px; font-weight: 600; color: #333;">${item.value}% <span style="color: #999; font-weight: 400;">(${item.weight})</span></div>
               </div>
-              <div style="font-size: 13px; font-weight: 600; color: #333;">${item.value}% <span style="color: #999; font-weight: 400;">(${item.weight})</span></div>
-            </div>
-          `).join('')}
-        </div>
-
-        <div style="border-top: 1px solid #eee; padding-top: 20px; margin-bottom: 20px;">
-          <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Premium Analysis</div>
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px; border-radius: 8px; text-align: center;">
-            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">🔒 Unlock Detailed Insights</div>
-            <div style="font-size: 13px; opacity: 0.9; margin-bottom: 12px;">
-              Get personalized recommendations to improve your resume and identify missing skills
-            </div>
-            <button id="resaid-upgrade-btn" style="
-              background: white;
-              color: #667eea;
-              border: none;
-              padding: 8px 16px;
-              border-radius: 6px;
-              font-weight: 600;
-              cursor: pointer;
-              font-size: 13px;
-            ">Upgrade to Premium</button>
+            `).join('')}
           </div>
-        </div>
+
+          <div style="border-top: 1px solid #eee; padding-top: 20px; margin-bottom: 20px;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Premium Analysis</div>
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">🔒 Unlock Detailed Insights</div>
+              <div style="font-size: 13px; opacity: 0.9; margin-bottom: 12px;">
+                Get personalized recommendations to improve your resume and identify missing skills
+              </div>
+              <button id="resaid-upgrade-btn" style="
+                background: white;
+                color: #667eea;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-weight: 600;
+                cursor: pointer;
+                font-size: 13px;
+              ">Upgrade to Premium</button>
+            </div>
+          </div>
+        ` : ''}
 
         <div style="display: flex; gap: 12px;">
           <button id="resaid-close-modal" style="
@@ -1914,16 +1936,18 @@ Answer the question directly and naturally, as if the applicant is writing it th
             font-weight: 600;
             cursor: pointer;
           ">Close</button>
-          <button id="resaid-view-full" style="
-            flex: 1;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 12px;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-          ">View Full Analysis</button>
+          ${isPremiumUser ? `
+            <button id="resaid-view-full" style="
+              flex: 1;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              border: none;
+              padding: 12px;
+              border-radius: 8px;
+              font-weight: 600;
+              cursor: pointer;
+            ">View Full Analysis</button>
+          ` : ''}
         </div>
       </div>
     `;
@@ -1939,15 +1963,17 @@ Answer the question directly and naturally, as if the applicant is writing it th
       modal.remove();
     });
 
-    modal.querySelector('#resaid-upgrade-btn').addEventListener('click', () => {
-      // TODO: Open upgrade/payment flow
-      alert('Premium upgrade coming soon!');
-    });
+    if (isPremiumUser) {
+      modal.querySelector('#resaid-upgrade-btn').addEventListener('click', () => {
+        // TODO: Open upgrade/payment flow
+        alert('Premium upgrade coming soon!');
+      });
 
-    modal.querySelector('#resaid-view-full').addEventListener('click', () => {
-      // Show premium content (for now, just show a message)
-      showPremiumAnalysis(scoreData);
-    });
+      modal.querySelector('#resaid-view-full').addEventListener('click', () => {
+        // Show premium content (for now, just show a message)
+        showPremiumAnalysis(scoreData);
+      });
+    }
 
     document.body.appendChild(modal);
 
