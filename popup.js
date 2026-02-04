@@ -312,6 +312,7 @@ function updatePremiumUI(isPremium) {
 }
 
 function buildPremiumPrompt(jobDescription, resumeText) {
+  const cleanedJobDescription = cleanJobDescription(jobDescription || '');
   return `I want you to act as an experienced resume reviewer and senior hiring manager.
 
 Compare the job description and the resume. Calculate a match score out of 100% by breaking it down into the following fixed categories and weights:
@@ -346,10 +347,67 @@ Do not add filler text, framing sentences, or headings other than Explanation.
 If the resume aligns well with the job description, output fewer explanation points or none at all rather than inventing issues.
 
 Job Description:
-${jobDescription ? jobDescription.substring(0, 6000) : ''}
+${cleanedJobDescription}
 
 Resume:
 ${resumeText ? resumeText.substring(0, 6000) : ''}`;
+}
+
+function cleanJobDescription(jobDescription) {
+  if (!jobDescription) return '';
+  const lines = jobDescription.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const stopMarkers = [
+    'About',
+    'About MongoDB',
+    'Compensation',
+    'Equal opportunities employer',
+    'Req ID',
+    'Benefits',
+    'Salary',
+    'base salary range',
+    'MongoDB’s base salary range',
+    'MongoDB is committed'
+  ];
+
+  const includeSections = [
+    'Role Responsibilities',
+    'Responsibilities',
+    'Candidate Profile',
+    'Qualifications',
+    'Requirements',
+    'Success Measures'
+  ];
+
+  const cleaned = [];
+  let inIncludedSection = false;
+
+  for (const line of lines) {
+    if (stopMarkers.some(marker => line.toLowerCase().includes(marker.toLowerCase()))) {
+      break;
+    }
+
+    if (includeSections.some(section => line.toLowerCase().includes(section.toLowerCase()))) {
+      inIncludedSection = true;
+      cleaned.push(line);
+      continue;
+    }
+
+    if (!inIncludedSection) {
+      if (line.length < 6) continue;
+      if (/^req id\b/i.test(line)) break;
+      cleaned.push(line);
+      continue;
+    }
+
+    cleaned.push(line);
+  }
+
+  const cleanedText = cleaned.join('\n').trim();
+  console.log('ResAid: Cleaned job description for LLM prompt.', {
+    originalLength: jobDescription.length,
+    cleanedLength: cleanedText.length
+  });
+  return cleanedText.substring(0, 6000);
 }
 
 function parseFitAnalysisResponse(text) {
