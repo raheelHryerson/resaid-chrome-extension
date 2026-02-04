@@ -1661,26 +1661,20 @@ Answer the question directly and naturally, as if the applicant is writing it th
             `).join('')}
           </div>
 
-          <div style="border-top: 1px solid #eee; padding-top: 20px; margin-bottom: 20px;">
-            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Premium Analysis</div>
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px; border-radius: 8px; text-align: center;">
-              <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">🔒 Unlock Detailed Insights</div>
-              <div style="font-size: 13px; opacity: 0.9; margin-bottom: 12px;">
-                Get personalized recommendations to improve your resume and identify missing skills
-              </div>
-              <button id="resaid-upgrade-btn" style="
-                background: white;
-                color: #667eea;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 6px;
-                font-weight: 600;
-                cursor: pointer;
-                font-size: 13px;
-              ">Upgrade to Premium</button>
+          <div id="premiumAnalysisContainer" style="border-top: 1px solid #eee; padding-top: 20px; margin-bottom: 20px;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #333;">Premium Analysis</div>
+            <div style="font-size: 13px; color: #666; margin-bottom: 12px;">
+              Personalized improvements based on your resume and the job description.
             </div>
           </div>
-        ` : ''}
+        ` : `
+          <div style="border-top: 1px solid #eee; padding-top: 20px; margin-bottom: 20px;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Premium Analysis</div>
+            <div style="background: #f5f5f5; color: #666; padding: 12px; border-radius: 8px; text-align: center; font-size: 13px;">
+              🔒 Premium required to see resume improvement suggestions.
+            </div>
+          </div>
+        `}
 
         <div style="display: flex; gap: 12px;">
           <button id="resaid-close-modal" style="
@@ -1721,11 +1715,6 @@ Answer the question directly and naturally, as if the applicant is writing it th
     });
 
     if (isPremiumUser) {
-      modal.querySelector('#resaid-upgrade-btn').addEventListener('click', () => {
-        // TODO: Open upgrade/payment flow
-        alert('Premium upgrade coming soon!');
-      });
-
       modal.querySelector('#resaid-view-full').addEventListener('click', () => {
         // Show premium content (for now, just show a message)
         showPremiumAnalysis(scoreData);
@@ -1733,6 +1722,10 @@ Answer the question directly and naturally, as if the applicant is writing it th
     }
 
     document.body.appendChild(modal);
+
+    if (isPremiumUser) {
+      showPremiumAnalysis(scoreData);
+    }
 
     // Draw pie chart
     setTimeout(() => {
@@ -1752,7 +1745,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
     }
 
     // Add premium content
-    const container = modal.querySelector('div[style*="border-top"]');
+    const container = modal.querySelector('#premiumAnalysisContainer') || modal.querySelector('div[style*="border-top"]');
     const premiumDiv = document.createElement('div');
     premiumDiv.className = 'premium-content';
     premiumDiv.style.cssText = `
