@@ -23,7 +23,6 @@
       padding: 20px;
       text-align: center;
       border-bottom: 3px solid #2328b8;
-      position: relative;
     }
     
     .header .logo {
@@ -46,27 +45,6 @@
       font-weight: 700;
     }
 
-    .close-popup {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      width: 28px;
-      height: 28px;
-      padding: 0;
-      border-radius: 50%;
-      border: 1px solid #ddd;
-      background: #fff;
-      color: #555;
-      font-size: 16px;
-      line-height: 1;
-      cursor: pointer;
-    }
-
-    .close-popup:hover {
-      background: #f5f5f5;
-      box-shadow: none;
-      transform: none;
-    }
     
     .header p {
       font-size: 12px;
@@ -380,30 +358,10 @@
       padding: 8px;
     }
 
-    .tracker-link {
-      display: inline-block;
-      margin-top: 10px;
-      padding: 8px 12px;
-      background: linear-gradient(135deg, #2328b8 0%, #1a1f8a 100%);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 12px;
-      cursor: pointer;
-      text-decoration: none;
-      font-weight: 600;
-      transition: all 0.3s ease;
-    }
-
-    .tracker-link:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-    }
   </style>
 </head>
 <body>
   <div class="header">
-    <button id="closePopup" class="close-popup" aria-label="Close popup">×</button>
     <img src="icons/resAid_logo.png" alt="ResAid" class="logo">
   </div>
   
@@ -490,7 +448,6 @@
         <button id="refreshPremiumAnalysis" class="small-btn">Generate Explanation</button>
       </div>
 
-      <button id="openTrackerBtn" class="tracker-link" style="margin-top: 10px;">Open Application Tracker</button>
     </div>
     
     <!-- Resume Selection -->
@@ -504,22 +461,6 @@
     <!-- Action -->
     <div class="section">
       <button id="syncProfileBtn" style="background: #f0f0f0; color: #333; margin-bottom: 10px; width: 100%;">Sync Profile</button>
-    </div>
-    
-    <!-- Applications Tracker -->
-    <div class="section">
-      <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
-        <span>Applications Tracker</span>
-        <button id="toggleApplications" style="background: none; border: none; color: #2328b8; cursor: pointer; font-size: 14px;">▼</button>
-      </div>
-      <div id="applicationsList" style="display: none; margin-top: 12px;">
-        <div id="applicationsContent">
-          <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
-            Loading applications...
-          </div>
-        </div>
-        <button id="viewAllApplications" style="width: 100%; padding: 8px; margin-top: 12px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; font-size: 14px;">View All Applications</button>
-      </div>
     </div>
     
     <div class="settings-link" id="settingsLink">Extension Settings</div>
