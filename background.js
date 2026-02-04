@@ -30,6 +30,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ tabId: sender.tab?.id || null });
   }
 
+  if (message.type === 'OPEN_POPUP') {
+    chrome.action.openPopup().then(() => {
+      sendResponse({ success: true });
+    }).catch((error) => {
+      console.error('ResAid: Failed to open popup:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+    return true;
+  }
+
   if (message.type === 'UPDATE_BADGE') {
     const tabId = sender.tab?.id;
     if (tabId) {
