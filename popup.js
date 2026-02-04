@@ -97,6 +97,13 @@ function setupEventListeners() {
     await performSmartFill();
   });
 
+  const closePopupBtn = document.getElementById('closePopup');
+  if (closePopupBtn) {
+    closePopupBtn.addEventListener('click', () => {
+      window.close();
+    });
+  }
+
   // Settings link
   document.getElementById('settingsLink').addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
@@ -412,10 +419,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const openTrackerBtn = document.getElementById('openTrackerBtn');
   const premiumUpgradeBtn = document.getElementById('premiumUpgradeBtn');
   const refreshPremiumAnalysis = document.getElementById('refreshPremiumAnalysis');
-
-  // AI status elements
-  const aiStatus = document.getElementById('aiStatus');
-  const aiStatusText = document.getElementById('aiStatusText');
 
   let currentTab = null;
   let jobDescription = null;
@@ -963,38 +966,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Check AI status and show in popup
-  async function checkAIStatus() {
-    try {
-      const aiSettings = await chrome.storage.sync.get(['enableAI', 'aiProvider', 'aiApiKey', 'aiModel']);
-      
-      if (aiStatus && aiStatusText) {
-        if (aiSettings.enableAI && aiSettings.aiApiKey) {
-          aiStatus.style.display = 'block';
-          aiStatus.style.background = '#e8f5e8';
-          aiStatus.style.border = '1px solid #4caf50';
-          aiStatus.style.color = '#2e7d32';
-          aiStatusText.textContent = `AI Question Answering: Enabled (${aiSettings.aiProvider || 'openai'})`;
-        } else if (aiSettings.enableAI && !aiSettings.aiApiKey) {
-          aiStatus.style.display = 'block';
-          aiStatus.style.background = '#fff3cd';
-          aiStatus.style.border = '1px solid #ffc107';
-          aiStatus.style.color = '#856404';
-          aiStatusText.textContent = 'AI Question Answering: Enabled but needs API key';
-        } else {
-          aiStatus.style.display = 'block';
-          aiStatus.style.background = '#f5f5f5';
-          aiStatus.style.border = '1px solid #ddd';
-          aiStatus.style.color = '#666';
-          aiStatusText.textContent = 'AI Question Answering: Disabled';
-        }
-      }
-    } catch (err) {
-      console.log('Error checking AI status:', err);
-      if (aiStatus) aiStatus.style.display = 'none';
-    }
-  }
-
-  // Initialize AI status check
-  checkAIStatus();
+  // AI status is managed in extension settings.
 });
