@@ -1580,19 +1580,10 @@ Answer the question directly and naturally, as if the applicant is writing it th
 
   async function getSubscriptionStatus() {
     try {
-      const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
-      if (!settings.apiEndpoint || !settings.apiKey) return false;
-      const response = await fetch(`${settings.apiEndpoint}/api/subscription/check`, {
-        headers: {
-          'Authorization': `Bearer ${settings.apiKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      if (!response.ok) return false;
-      const data = await response.json();
-      return data.status && data.status !== 'free';
+      const { subscriptionStatus } = await chrome.storage.sync.get(['subscriptionStatus']);
+      return subscriptionStatus === 'premium';
     } catch (error) {
-      console.log('ResAid: Failed to fetch subscription status:', error);
+      console.log('ResAid: Failed to read subscription status:', error);
       return false;
     }
   }
@@ -1878,11 +1869,8 @@ Answer the question directly and naturally, as if the applicant is writing it th
         position: absolute;
         top: 6px;
         right: 6px;
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
         border: none;
-        background: rgba(255, 255, 255, 0.2);
+        background: transparent;
         color: white;
         font-size: 14px;
         line-height: 1;

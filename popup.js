@@ -289,7 +289,9 @@ async function getSubscriptionStatus() {
     });
     if (!response.ok) return false;
     const data = await response.json();
-    return data.status && data.status !== 'free';
+    const isPremium = data.status && data.status !== 'free';
+    await chrome.storage.sync.set({ subscriptionStatus: isPremium ? 'premium' : 'free' });
+    return isPremium;
   } catch (error) {
     console.log('ResAid: Failed to fetch subscription status:', error);
     return false;
