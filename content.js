@@ -53,13 +53,6 @@
     'main'
   ];
 
-  const QUESTION_FIELD_SELECTORS = [
-    'textarea',
-    'input[type="text"]',
-    '[contenteditable="true"]',
-    'div[role="textbox"]'
-  ];
-
   // Keyword-based field detection (more reliable than patterns)
   const FIELD_KEYWORDS = {
     firstName: ['firstname', 'first_name', 'fname', 'givenname', 'first', 'given_name', 'forename'],
@@ -119,7 +112,6 @@
   let detectedJobDescription = null;
   let jobDescriptionFromCurrentPage = false;
   let successCheckInFlight = false;
-  let activeField = null;
   let personalInfo = null;
 
   // Helper to get current tab ID
@@ -1025,60 +1017,6 @@
     return hasKeywords || text.length > 800;
   }
 
-  // Find question context from field
-  function getQuestionContext(field) {
-    // Try to find associated label
-    let question = '';
-    
-    // Method 1: Label element
-    if (field.id) {
-      const label = document.querySelector(`label[for="${field.id}"]`);
-      if (label) {
-        question = label.innerText || label.textContent;
-      }
-    }
-    
-    // Method 2: Closest label
-    if (!question) {
-      const closestLabel = field.closest('label');
-      if (closestLabel) {
-        question = closestLabel.innerText || closestLabel.textContent;
-      }
-    }
-    
-    // Method 3: Aria-label
-    if (!question) {
-      question = field.getAttribute('aria-label') || field.getAttribute('aria-labelledby') || '';
-    }
-    
-    // Method 4: Placeholder
-    if (!question) {
-      question = field.getAttribute('placeholder') || '';
-    }
-    
-    // Method 5: Look at previous sibling or parent text
-    if (!question) {
-      const parent = field.parentElement;
-      if (parent) {
-        const prevSibling = field.previousElementSibling;
-        if (prevSibling) {
-          question = prevSibling.innerText || prevSibling.textContent || '';
-        }
-        if (!question) {
-          // Get parent's first text node
-          for (const child of parent.childNodes) {
-            if (child.nodeType === Node.TEXT_NODE && child.textContent.trim()) {
-              question = child.textContent.trim();
-              break;
-            }
-          }
-        }
-      }
-    }
-    
-    return question.trim().replace(/\s+/g, ' ').slice(0, 500);
-  }
-
   // Inject answer into field
   function fillField(field, answer) {
     console.log('ResAid: fillField called with answer:', answer, 'for field:', field.name || field.id || field.placeholder || field.tagName);
@@ -1103,178 +1041,6 @@
     setTimeout(() => {
       field.style.border = originalBorder;
     }, 2000);
-  }
-
-  // Listen for focus on question fields
-  document.addEventListener('focusin', (e) => {
-    const target = e.target;
-    if (QUESTION_FIELD_SELECTORS.some(sel => target.matches(sel))) {
-      activeField = target;
-      const question = getQuestionContext(target);
-      
-      // Show ResAid assist button near field
-      if (question && question.length > 5) {
-        showAssistButton(target, question);
-      }
-    }
-  });
-
-  // Show assist button
-  function showAssistButton(field, question) {
-    // Remove existing button
-    const existing = document.getElementById('resaid-assist-btn');
-    if (existing) existing.remove();
-    
-    const btn = document.createElement('button');
-    btn.id = 'resaid-assist-btn';
-    btn.innerText = '✨ ResAid';
-    btn.style.cssText = `
-      position: absolute;
-      z-index: 999999;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      transition: all 0.2s;
-    `;
-    
-    btn.addEventListener('mouseenter', () => {
-      btn.style.transform = 'scale(1.05)';
-      btn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)';
-    });
-    
-    btn.addEventListener('mouseleave', () => {
-      btn.style.transform = 'scale(1)';
-      btn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-    });
-    
-    btn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      btn.innerText = '⏳ Generating...';
-      btn.disabled = true;
-      
-      try {
-        // If this field is a common personal info field, fill locally without AI
-        if (!personalInfo) {
-          const result = await chrome.runtime.sendMessage({ type: 'GET_PERSONAL_INFO' });
-          personalInfo = result?.data || {};
-        }
-        const fieldType = detectFieldType(field);
-        const COMMON_PERSONAL_FIELDS = new Set([
-          'firstName','lastName','fullName','email','phone','extension','countryPhoneCode','linkedin','location','city','postalCode','country','currentCompany'
-        ]);
-
-        if (fieldType && COMMON_PERSONAL_FIELDS.has(fieldType)) {
-          // Try to resolve value (first/last fallback to fullName split)
-          let value = personalInfo[fieldType];
-          if (!value && fieldType === 'firstName' && personalInfo.fullName) {
-            value = personalInfo.fullName.split(' ')[0] || '';
-          }
-          if (!value && fieldType === 'lastName' && personalInfo.fullName) {
-            const parts = personalInfo.fullName.split(' ');
-            value = parts.slice(1).join(' ');
-          }
-
-          if (value) {
-            fillField(field, value);
-            btn.innerText = '✨ Filled';
-            setTimeout(() => btn.remove(), 1200);
-            return;
-          } else {
-            btn.innerText = '⚠️ Add in Settings';
-            setTimeout(() => btn.remove(), 1600);
-            return;
-          }
-        }
-
-        // Get autofill context from background script (avoids CSP issues)
-        const contextResponse = await chrome.runtime.sendMessage({
-          type: 'GET_AUTOFILL_CONTEXT'
-        });
-        
-        let context = contextResponse?.data;
-
-        // Fallback: if user forgot to enable, use stored defaults
-        if (!context || !context.enabled) {
-          const fallback = await chrome.runtime.sendMessage({ type: 'GET_FALLBACK_CONTEXT' });
-          const { lastResumeId, guidelines } = fallback?.data || {};
-          if (lastResumeId) {
-            context = {
-              enabled: true,
-              resumeId: lastResumeId,
-              guidelines: guidelines || '',
-              jobDescription: detectedJobDescription?.text || ''
-            };
-          }
-        }
-
-        if (!context || !context.enabled) {
-          throw new Error('Autofill not enabled. Open the popup once to choose a resume.');
-        }
-        
-        // Use detected job description if context lacks one
-        let jobDesc = (context.jobDescription && context.jobDescription.trim())
-          ? context.jobDescription
-          : (detectedJobDescription?.text || '').trim();
-
-        // Fallback to last-known JD from background (previous tab) if still empty
-        if (!jobDesc || jobDesc.length < 50) {
-          const last = await chrome.runtime.sendMessage({ type: 'GET_LAST_JOB_DESCRIPTION' });
-          if (last?.data?.text) {
-            jobDesc = last.data.text.trim();
-          }
-        }
-
-        if (!jobDesc || jobDesc.length < 50) {
-          throw new Error('No job description detected. Click Refresh in the popup, then try again.');
-        }
-
-        // Request answer generation from background
-        const response = await chrome.runtime.sendMessage({
-          type: 'GENERATE_ANSWER',
-          data: {
-            resumeId: context.resumeId,
-            question: question,
-            jobDescription: jobDesc,
-            guidelines: context.guidelines
-          }
-        });
-        
-        if (response.success && response.data) {
-          fillField(field, response.data.answer);
-          btn.remove();
-        } else {
-          throw new Error(response.error || 'Failed to generate answer');
-        }
-      } catch (err) {
-        console.error('ResAid autofill error:', err);
-        btn.innerText = (err.message || 'Error');
-        setTimeout(() => btn.remove(), 3000);
-      }
-    });
-    
-    // Position near field
-    const rect = field.getBoundingClientRect();
-    btn.style.top = (window.scrollY + rect.top - 35) + 'px';
-    btn.style.left = (window.scrollX + rect.right - 100) + 'px';
-    
-    document.body.appendChild(btn);
-    
-    // Remove on blur
-    field.addEventListener('blur', () => {
-      setTimeout(() => {
-        if (document.getElementById('resaid-assist-btn')) {
-          btn.remove();
-        }
-      }, 200);
-    }, { once: true });
   }
 
   // Extract question text from field attributes
@@ -1576,7 +1342,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
     return elements;
   }
 
-  // Auto-fill common fields
+  // Auto-fill common fields (triggered via popup/shortcut, no inline assist button)
   async function autoFillCommonFields(profileDataOverride = null) {
     let personalInfo = profileDataOverride;
     
@@ -1812,8 +1578,18 @@ Answer the question directly and naturally, as if the applicant is writing it th
     }
   }
 
+  async function getSubscriptionStatus() {
+    try {
+      const { subscriptionStatus } = await chrome.storage.sync.get(['subscriptionStatus']);
+      return subscriptionStatus === 'premium';
+    } catch (error) {
+      console.log('ResAid: Failed to read subscription status:', error);
+      return false;
+    }
+  }
+
   // Show detailed fit score modal with pie chart
-  function showFitScoreModal(scoreData) {
+  async function showFitScoreModal(scoreData) {
     // Remove existing modal only (keep badge visible)
     const existingModal = document.getElementById('resaid-fit-modal');
     if (existingModal) existingModal.remove();
@@ -1834,6 +1610,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     `;
 
+    const isPremiumUser = await getSubscriptionStatus();
     const score = scoreData.overallScore;
     const color = score >= 75 ? '#4CAF50' : score >= 50 ? '#FF9800' : '#f44336';
 
@@ -1870,38 +1647,34 @@ Answer the question directly and naturally, as if the applicant is writing it th
           <canvas id="resaid-pie-chart" width="200" height="200" style="display: block; margin: 0 auto;"></canvas>
         </div>
 
-        <div style="margin-bottom: 20px;">
-          <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Score Breakdown</div>
-          ${pieData.map(item => `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <div style="display: flex; align-items: center;">
-                <div style="width: 12px; height: 12px; background: ${item.color}; border-radius: 2px; margin-right: 8px;"></div>
-                <span style="font-size: 13px; color: #555;">${item.label}</span>
+        ${isPremiumUser ? `
+          <div style="margin-bottom: 20px;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Score Breakdown</div>
+            ${pieData.map(item => `
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center;">
+                  <div style="width: 12px; height: 12px; background: ${item.color}; border-radius: 2px; margin-right: 8px;"></div>
+                  <span style="font-size: 13px; color: #555;">${item.label}</span>
+                </div>
+                <div style="font-size: 13px; font-weight: 600; color: #333;">${item.value}% <span style="color: #999; font-weight: 400;">(${item.weight})</span></div>
               </div>
-              <div style="font-size: 13px; font-weight: 600; color: #333;">${item.value}% <span style="color: #999; font-weight: 400;">(${item.weight})</span></div>
-            </div>
-          `).join('')}
-        </div>
-
-        <div style="border-top: 1px solid #eee; padding-top: 20px; margin-bottom: 20px;">
-          <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Premium Analysis</div>
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px; border-radius: 8px; text-align: center;">
-            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">🔒 Unlock Detailed Insights</div>
-            <div style="font-size: 13px; opacity: 0.9; margin-bottom: 12px;">
-              Get personalized recommendations to improve your resume and identify missing skills
-            </div>
-            <button id="resaid-upgrade-btn" style="
-              background: white;
-              color: #667eea;
-              border: none;
-              padding: 8px 16px;
-              border-radius: 6px;
-              font-weight: 600;
-              cursor: pointer;
-              font-size: 13px;
-            ">Upgrade to Premium</button>
+            `).join('')}
           </div>
-        </div>
+
+          <div id="premiumAnalysisContainer" style="border-top: 1px solid #eee; padding-top: 20px; margin-bottom: 20px;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #333;">Premium Analysis</div>
+            <div style="font-size: 13px; color: #666; margin-bottom: 12px;">
+              Personalized improvements based on your resume and the job description.
+            </div>
+          </div>
+        ` : `
+          <div style="border-top: 1px solid #eee; padding-top: 20px; margin-bottom: 20px;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Premium Analysis</div>
+            <div style="background: #f5f5f5; color: #666; padding: 12px; border-radius: 8px; text-align: center; font-size: 13px;">
+              🔒 Premium required to see resume improvement suggestions.
+            </div>
+          </div>
+        `}
 
         <div style="display: flex; gap: 12px;">
           <button id="resaid-close-modal" style="
@@ -1914,16 +1687,18 @@ Answer the question directly and naturally, as if the applicant is writing it th
             font-weight: 600;
             cursor: pointer;
           ">Close</button>
-          <button id="resaid-view-full" style="
-            flex: 1;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 12px;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-          ">View Full Analysis</button>
+          ${isPremiumUser ? `
+            <button id="resaid-view-full" style="
+              flex: 1;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              border: none;
+              padding: 12px;
+              border-radius: 8px;
+              font-weight: 600;
+              cursor: pointer;
+            ">View Full Analysis</button>
+          ` : ''}
         </div>
       </div>
     `;
@@ -1939,17 +1714,18 @@ Answer the question directly and naturally, as if the applicant is writing it th
       modal.remove();
     });
 
-    modal.querySelector('#resaid-upgrade-btn').addEventListener('click', () => {
-      // TODO: Open upgrade/payment flow
-      alert('Premium upgrade coming soon!');
-    });
-
-    modal.querySelector('#resaid-view-full').addEventListener('click', () => {
-      // Show premium content (for now, just show a message)
-      showPremiumAnalysis(scoreData);
-    });
+    if (isPremiumUser) {
+      modal.querySelector('#resaid-view-full').addEventListener('click', () => {
+        // Show premium content (for now, just show a message)
+        showPremiumAnalysis(scoreData);
+      });
+    }
 
     document.body.appendChild(modal);
+
+    if (isPremiumUser) {
+      showPremiumAnalysis(scoreData);
+    }
 
     // Draw pie chart
     setTimeout(() => {
@@ -1969,7 +1745,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
     }
 
     // Add premium content
-    const container = modal.querySelector('div[style*="border-top"]');
+    const container = modal.querySelector('#premiumAnalysisContainer') || modal.querySelector('div[style*="border-top"]');
     const premiumDiv = document.createElement('div');
     premiumDiv.className = 'premium-content';
     premiumDiv.style.cssText = `
@@ -2082,6 +1858,17 @@ Answer the question directly and naturally, as if the applicant is writing it th
 
     const components = scoreData.scoreComponents;
     badge.innerHTML = `
+      <button class="resaid-badge-close" aria-label="Dismiss fit score" style="
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        border: none;
+        background: transparent;
+        color: white;
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+      ">×</button>
       <div style="font-size: 11px; opacity: 0.9; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">Resume-Job Fit</div>
       <div style="font-size: 36px; font-weight: 700; line-height: 1; margin-bottom: 8px;">${score}%</div>
       <div style="font-size: 10px; opacity: 0.8; margin-bottom: 8px;">
@@ -2100,6 +1887,14 @@ Answer the question directly and naturally, as if the applicant is writing it th
       badge.style.transform = 'scale(1) translateY(0)';
       badge.style.boxShadow = '0 8px 24px rgba(102, 126, 234, 0.4)';
     });
+
+    const closeButton = badge.querySelector('.resaid-badge-close');
+    if (closeButton) {
+      closeButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        badge.remove();
+      });
+    }
 
     badge.addEventListener('click', () => {
       // Show detailed modal instead of opening popup
@@ -2210,15 +2005,6 @@ Answer the question directly and naturally, as if the applicant is writing it th
       }
     }
     
-    if (message.type === 'FILL_ACTIVE_FIELD') {
-      if (activeField && message.answer) {
-        fillField(activeField, message.answer);
-        sendResponse({ success: true });
-      } else {
-        sendResponse({ success: false, error: 'No active field' });
-      }
-    }
-
     if (message.type === 'TRIGGER_AUTOFILL') {
       console.log('ResAid: TRIGGER_AUTOFILL message received, calling autoFillCommonFields()');
       (async () => {

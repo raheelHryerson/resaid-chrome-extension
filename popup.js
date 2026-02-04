@@ -267,23 +267,6 @@ function animateScoreMeter(score) {
   requestAnimationFrame(step);
 }
 
-function buildDashboardUrl(endpoint, tab) {
-  if (!endpoint) return null;
-  const trimmed = endpoint.replace(/\/+$/, '');
-  return `${trimmed}/dashboard?tab=${encodeURIComponent(tab)}`;
-}
-
-async function openDashboardApplicationsTab() {
-  const settings = await chrome.storage.sync.get(['apiEndpoint']);
-  const dashboardUrl = buildDashboardUrl(settings.apiEndpoint, 'applications');
-  if (!dashboardUrl) {
-    chrome.runtime.openOptionsPage();
-    alert('Set your API endpoint in Extension Settings to open your ResAid dashboard.');
-    return;
-  }
-  chrome.tabs.create({ url: dashboardUrl });
-}
-
 async function openDashboardUpgrade() {
   const settings = await chrome.storage.sync.get(['apiEndpoint']);
   if (!settings.apiEndpoint) {
@@ -306,7 +289,9 @@ async function getSubscriptionStatus() {
     });
     if (!response.ok) return false;
     const data = await response.json();
-    return data.status && data.status !== 'free';
+    const isPremium = data.status && data.status !== 'free';
+    await chrome.storage.sync.set({ subscriptionStatus: isPremium ? 'premium' : 'free' });
+    return isPremium;
   } catch (error) {
     console.log('ResAid: Failed to fetch subscription status:', error);
     return false;
@@ -409,13 +394,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const resumeSelect = document.getElementById('resumeSelect');
   const syncProfileBtn = document.getElementById('syncProfileBtn');
   const settingsLink = document.getElementById('settingsLink');
-  const openTrackerBtn = document.getElementById('openTrackerBtn');
   const premiumUpgradeBtn = document.getElementById('premiumUpgradeBtn');
   const refreshPremiumAnalysis = document.getElementById('refreshPremiumAnalysis');
-
-  // AI status elements
-  const aiStatus = document.getElementById('aiStatus');
-  const aiStatusText = document.getElementById('aiStatusText');
 
   let currentTab = null;
   let jobDescription = null;
@@ -426,11 +406,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Get current tab
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTab = tabs[0];
-
-  // Tracker button
-  openTrackerBtn.addEventListener('click', () => {
-    openDashboardApplicationsTab();
-  });
 
   if (premiumUpgradeBtn) {
     premiumUpgradeBtn.addEventListener('click', () => {
@@ -852,141 +827,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   isPremiumUser = await getSubscriptionStatus();
   updatePremiumUI(isPremiumUser);
-});
 
-// ===== APPLICATIONS TRACKER =====
-
-document.addEventListener('DOMContentLoaded', async () => {
-  const toggleApplications = document.getElementById('toggleApplications');
-  const applicationsList = document.getElementById('applicationsList');
-  const applicationsContent = document.getElementById('applicationsContent');
-  const viewAllApplications = document.getElementById('viewAllApplications');
-  
-  let applicationsExpanded = false;
-  
-  // Toggle applications list
-  toggleApplications.addEventListener('click', () => {
-    applicationsExpanded = !applicationsExpanded;
-    applicationsList.style.display = applicationsExpanded ? 'block' : 'none';
-    toggleApplications.textContent = applicationsExpanded ? '▲' : '▼';
-    
-    if (applicationsExpanded) {
-      loadRecentApplications();
-    }
-  });
-  
-  // View all applications
-  viewAllApplications.addEventListener('click', () => {
-    openDashboardApplicationsTab();
-  });
-  
-  // Load recent applications
-  async function loadRecentApplications() {
-    try {
-      // Try to load from website API first if configured
-      const settings = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
-      let websiteApps = [];
-      let localApps = [];
-
-      if (settings.apiEndpoint && settings.apiKey) {
-        try {
-          const response = await fetch(`${settings.apiEndpoint}/api/applications`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${settings.apiKey}`,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.applications) {
-              websiteApps = data.applications.slice(0, 3); // Get latest 3 from website
-            }
-          }
-        } catch (apiError) {
-          console.log('Failed to load applications from website:', apiError);
-        }
-      }
-
-      // Also load from local storage as fallback/backup
-      const result = await chrome.storage.local.get(['applications']);
-      localApps = result.applications || [];
-
-      // Combine and deduplicate applications (prefer website data)
-      const allApps = [...websiteApps, ...localApps];
-      const uniqueApps = allApps.filter((app, index, self) =>
-        index === self.findIndex(a =>
-          (a.jobUrl === app.jobUrl && a.jobUrl) ||
-          (a.company === app.company && a.position === app.position)
-        )
-      );
-
-      if (uniqueApps.length === 0) {
-        applicationsContent.innerHTML = `
-          <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
-            No applications tracked yet.<br>
-            <small>Applications will be tracked automatically when you submit job applications.</small>
-          </div>
-        `;
-        return;
-      }
-
-      // Show last 3 applications
-      const recentApps = uniqueApps.slice(-3).reverse();
-
-      applicationsContent.innerHTML = recentApps.map(app => `
-        <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px; margin-bottom: 8px; background: #fafafa;">
-          <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${app.jobTitle || app.position || 'Unknown Position'}</div>
-          <div style="font-size: 14px; color: #666; margin-bottom: 4px;">${app.companyName || app.company || 'Unknown Company'}</div>
-          <div style="font-size: 12px; color: #888;">
-            ${app.status || 'Applied'} • ${new Date(app.createdAt || app.dateAdded || app.appliedDate).toLocaleDateString()}
-          </div>
-        </div>
-      `).join('');
-
-    } catch (error) {
-      console.error('Error loading applications:', error);
-      applicationsContent.innerHTML = `
-        <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
-          Error loading applications
-        </div>
-      `;
+  if (isPremiumUser && lastJobDescriptionText && lastScoreData) {
+    const analysisKey = `${lastJobDescriptionText.substring(0, 200)}|${lastScoreData.overallScore}`;
+    if (lastPremiumAnalysisKey !== analysisKey) {
+      lastPremiumAnalysisKey = analysisKey;
+      generatePremiumAnalysis(lastJobDescriptionText, lastScoreData);
     }
   }
-
-  // Check AI status and show in popup
-  async function checkAIStatus() {
-    try {
-      const aiSettings = await chrome.storage.sync.get(['enableAI', 'aiProvider', 'aiApiKey', 'aiModel']);
-      
-      if (aiStatus && aiStatusText) {
-        if (aiSettings.enableAI && aiSettings.aiApiKey) {
-          aiStatus.style.display = 'block';
-          aiStatus.style.background = '#e8f5e8';
-          aiStatus.style.border = '1px solid #4caf50';
-          aiStatus.style.color = '#2e7d32';
-          aiStatusText.textContent = `AI Question Answering: Enabled (${aiSettings.aiProvider || 'openai'})`;
-        } else if (aiSettings.enableAI && !aiSettings.aiApiKey) {
-          aiStatus.style.display = 'block';
-          aiStatus.style.background = '#fff3cd';
-          aiStatus.style.border = '1px solid #ffc107';
-          aiStatus.style.color = '#856404';
-          aiStatusText.textContent = 'AI Question Answering: Enabled but needs API key';
-        } else {
-          aiStatus.style.display = 'block';
-          aiStatus.style.background = '#f5f5f5';
-          aiStatus.style.border = '1px solid #ddd';
-          aiStatus.style.color = '#666';
-          aiStatusText.textContent = 'AI Question Answering: Disabled';
-        }
-      }
-    } catch (err) {
-      console.log('Error checking AI status:', err);
-      if (aiStatus) aiStatus.style.display = 'none';
-    }
-  }
-
-  // Initialize AI status check
-  checkAIStatus();
 });
+
+// AI status is managed in extension settings.
