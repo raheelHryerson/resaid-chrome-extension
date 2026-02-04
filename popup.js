@@ -3,6 +3,17 @@
 let currentTab = null;
 let isPremiumUser = false;
 let lastPremiumAnalysisKey = null;
+const premiumAnalysisCacheKey = 'premiumAnalysisCache';
+
+function buildPremiumCacheKey(resumeId, jobDescriptionText) {
+  const normalized = `${resumeId || 'unknown'}|${jobDescriptionText || ''}`.toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    hash = (hash << 5) - hash + normalized.charCodeAt(i);
+    hash |= 0;
+  }
+  return `premium:${hash}`;
+}
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async function() {
@@ -337,10 +348,22 @@ Job Description:
 ${jobDescription ? jobDescription.substring(0, 6000) : ''}`;
 }
 
-async function generatePremiumAnalysis(jobDescriptionText, scoreData) {
+async function generatePremiumAnalysis(jobDescriptionText, scoreData, options = {}) {
   if (!isPremiumUser) return;
   const premiumText = document.getElementById('premiumAnalysisText');
   if (!premiumText) return;
+  const { forceRefresh = false } = options;
+  const resumeId = document.getElementById('resumeSelect')?.value || '';
+  const cacheKey = buildPremiumCacheKey(resumeId, jobDescriptionText);
+
+  if (!forceRefresh) {
+    const cached = await chrome.storage.local.get([premiumAnalysisCacheKey]);
+    const cachedEntry = cached[premiumAnalysisCacheKey]?.[cacheKey];
+    if (cachedEntry?.content) {
+      premiumText.textContent = cachedEntry.content;
+      return;
+    }
+  }
 
   const settings = await chrome.storage.sync.get(['aiApiKey', 'aiModel', 'aiEnabled']);
   if (!settings.aiApiKey || settings.aiEnabled === false) {
@@ -381,7 +404,15 @@ async function generatePremiumAnalysis(jobDescriptionText, scoreData) {
 
     const data = await response.json();
     const content = data?.choices?.[0]?.message?.content?.trim() || '';
-    premiumText.textContent = content || 'No explanation returned.';
+    const finalContent = content || 'No explanation returned.';
+    premiumText.textContent = finalContent;
+    const cached = await chrome.storage.local.get([premiumAnalysisCacheKey]);
+    const cacheMap = cached[premiumAnalysisCacheKey] || {};
+    cacheMap[cacheKey] = {
+      content: finalContent,
+      savedAt: Date.now()
+    };
+    await chrome.storage.local.set({ [premiumAnalysisCacheKey]: cacheMap });
   } catch (error) {
     premiumText.textContent = 'Error generating premium explanation.';
     console.error('ResAid: Premium analysis error:', error);
@@ -415,7 +446,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (refreshPremiumAnalysis) {
     refreshPremiumAnalysis.addEventListener('click', () => {
-      generatePremiumAnalysis(lastJobDescriptionText, lastScoreData);
+      generatePremiumAnalysis(lastJobDescriptionText, lastScoreData, { forceRefresh: true });
     });
   }
 
