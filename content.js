@@ -1786,20 +1786,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
         position: relative;
       ">
         <div style="text-align: center; margin-bottom: 20px;">
-          <div style="font-size: 14px; color: #666; margin-bottom: 8px;">Resume-Job Fit Analysis</div>
-          <div style="font-size: 20px; font-weight: 600; color: #333; margin-bottom: 6px;">Generating resume-job fit score...</div>
-          <div style="font-size: 12px; color: #666;">Open the extension popup to view results.</div>
-        </div>
-
-        <div style="margin-bottom: 20px; font-size: 13px; color: #555;">
-          <div style="font-weight: 600; margin-bottom: 8px;">Score Breakdown</div>
-          <div>Skills</div>
-          <div>Experience</div>
-          <div>Role Alignment</div>
-          <div>Seniority</div>
-          <div>Education</div>
-          <div>Certifications</div>
-          <div>Keywords</div>
+          <div style="font-size: 16px; font-weight: 600; color: #333;">Generating resume-job fit score...</div>
         </div>
 
         <div style="display: flex; gap: 12px;">

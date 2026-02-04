@@ -354,6 +354,7 @@ ${resumeText ? resumeText.substring(0, 6000) : ''}`;
 
 function parseFitAnalysisResponse(text) {
   if (!text) return null;
+  console.log('ResAid: Parsing LLM fit analysis response.');
   const extract = (label) => {
     const regex = new RegExp(`${label}\\s*:\\s*(\\d{1,3})%`, 'i');
     const match = text.match(regex);
@@ -369,6 +370,7 @@ function parseFitAnalysisResponse(text) {
   const keywords = extract('Keywords');
 
   if ([skills, experience, role, seniority, education, certifications, keywords].some(value => value === null)) {
+    console.log('ResAid: Missing expected fit analysis fields in LLM response.');
     return null;
   }
 
@@ -420,6 +422,7 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
     const cached = await chrome.storage.local.get([premiumAnalysisCacheKey]);
     const cachedEntry = cached[premiumAnalysisCacheKey]?.[cacheKey];
     if (cachedEntry?.content && cachedEntry?.scoreComponents) {
+      console.log('ResAid: Using cached LLM fit analysis for popup.');
       premiumText.textContent = cachedEntry.content;
       return cachedEntry;
     }
@@ -456,6 +459,7 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
   if (refreshButton) refreshButton.textContent = 'Show Explanation';
 
   try {
+    console.log('ResAid: Calling LLM for fit analysis.');
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -478,6 +482,7 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
 
     const data = await response.json();
     const content = data?.choices?.[0]?.message?.content?.trim() || '';
+    console.log('ResAid: LLM fit analysis response received.');
     const parsed = parseFitAnalysisResponse(content);
     if (!parsed) {
       premiumText.textContent = 'Could not parse the fit analysis response.';
@@ -499,6 +504,7 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
       overallScore
     };
     await chrome.storage.local.set({ [premiumAnalysisCacheKey]: cacheMap });
+    console.log('ResAid: LLM fit analysis cached.');
     if (!isPremiumUser) {
       const usage = await chrome.storage.sync.get(['fitFreeUsageCount']);
       const count = usage.fitFreeUsageCount || 0;
@@ -933,6 +939,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!forceRefresh && lastPremiumAnalysisKey === analysisKey) return;
       lastPremiumAnalysisKey = analysisKey;
 
+      console.log('ResAid: Starting LLM fit score calculation.', {
+        resumeId,
+        forceRefresh
+      });
       explanationVisible = false;
       const refreshButton = document.getElementById('refreshPremiumAnalysis');
       if (refreshButton) refreshButton.textContent = 'Show Explanation';
@@ -947,6 +957,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
 
+      console.log('ResAid: LLM fit score calculated for popup.', {
+        overallScore: analysisResult.overallScore,
+        scoreComponents: analysisResult.scoreComponents
+      });
       hasFitAccess = true;
       const scoreData = {
         overallScore: analysisResult.overallScore,
