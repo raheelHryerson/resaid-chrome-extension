@@ -1717,7 +1717,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
     }, 2000);
   }, 1000);
 
-  // Calculate fit score and show floating badge (only if valid job description exists)
+  // Show floating badge (only if valid job description exists)
   async function calculateAndShowFitScore() {
     try {
       // Check if we have a valid job description first
@@ -1735,13 +1735,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
         return;
       }
 
-      // Calculate score
-      const scoreResult = await scoreResumeJobMatch(detectedJobDescription.text, resumeData);
-      
-      if (scoreResult && scoreResult.overallScore) {
-        // Show floating badge that triggers modal on click
-        showFitScoreBadge(scoreResult);
-      }
+      showFitScoreBadge();
     } catch (err) {
       console.error('ResAid: Error calculating fit score:', err);
     }
@@ -1757,8 +1751,8 @@ Answer the question directly and naturally, as if the applicant is writing it th
     }
   }
 
-  // Show detailed fit score modal with pie chart
-  async function showFitScoreModal(scoreData) {
+  // Show fit score modal placeholder
+  async function showFitScoreModal() {
     // Remove existing modal only (keep badge visible)
     const existingModal = document.getElementById('resaid-fit-modal');
     if (existingModal) existingModal.remove();
@@ -1779,22 +1773,6 @@ Answer the question directly and naturally, as if the applicant is writing it th
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     `;
 
-    const isPremiumUser = await getSubscriptionStatus();
-    const score = scoreData.overallScore;
-    const color = score >= 75 ? '#4CAF50' : score >= 50 ? '#FF9800' : '#f44336';
-
-    // Create pie chart data
-    const components = scoreData.scoreComponents;
-    const pieData = [
-      { label: 'Skills Match', value: components.skillsMatch, color: '#667eea', weight: '35%' },
-      { label: 'Experience', value: components.experienceRelevance, color: '#764ba2', weight: '25%' },
-      { label: 'Role Alignment', value: components.roleAlignment, color: '#f093fb', weight: '15%' },
-      { label: 'Seniority', value: components.seniorityMatch, color: '#4facfe', weight: '7%' },
-      { label: 'Education', value: components.educationMatch, color: '#43e97b', weight: '8%' },
-      { label: 'Certifications', value: components.certificationMatch, color: '#fddb92', weight: '5%' },
-      { label: 'Keywords', value: components.keywordCoverage, color: '#38f9d7', weight: '5%' }
-    ];
-
     modal.innerHTML = `
       <div style="
         background: white;
@@ -1809,35 +1787,20 @@ Answer the question directly and naturally, as if the applicant is writing it th
       ">
         <div style="text-align: center; margin-bottom: 20px;">
           <div style="font-size: 14px; color: #666; margin-bottom: 8px;">Resume-Job Fit Analysis</div>
-          <div style="font-size: 48px; font-weight: 700; color: ${color}; margin-bottom: 8px;">${score}%</div>
-          <div style="font-size: 16px; color: #666;">Overall Match Score</div>
+          <div style="font-size: 20px; font-weight: 600; color: #333; margin-bottom: 6px;">Generating resume-job fit score...</div>
+          <div style="font-size: 12px; color: #666;">Open the extension popup to view results.</div>
         </div>
 
-        <div style="margin-bottom: 20px;">
-          <canvas id="resaid-pie-chart" width="200" height="200" style="display: block; margin: 0 auto;"></canvas>
+        <div style="margin-bottom: 20px; font-size: 13px; color: #555;">
+          <div style="font-weight: 600; margin-bottom: 8px;">Score Breakdown</div>
+          <div>Skills</div>
+          <div>Experience</div>
+          <div>Role Alignment</div>
+          <div>Seniority</div>
+          <div>Education</div>
+          <div>Certifications</div>
+          <div>Keywords</div>
         </div>
-
-        ${isPremiumUser ? `
-          <div style="margin-bottom: 20px;">
-            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Score Breakdown</div>
-            ${pieData.map(item => `
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <div style="display: flex; align-items: center;">
-                  <div style="width: 12px; height: 12px; background: ${item.color}; border-radius: 2px; margin-right: 8px;"></div>
-                  <span style="font-size: 13px; color: #555;">${item.label}</span>
-                </div>
-                <div style="font-size: 13px; font-weight: 600; color: #333;">${item.value}% <span style="color: #999; font-weight: 400;">(${item.weight})</span></div>
-              </div>
-            `).join('')}
-          </div>
-        ` : `
-          <div style="border-top: 1px solid #eee; padding-top: 20px; margin-bottom: 20px;">
-            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Score Breakdown</div>
-            <div style="background: #f5f5f5; color: #666; padding: 12px; border-radius: 8px; text-align: center; font-size: 13px;">
-              🔒 Premium required to see the full breakdown in the page modal.
-            </div>
-          </div>
-        `}
 
         <div style="display: flex; gap: 12px;">
           <button id="resaid-close-modal" style="
@@ -1850,7 +1813,6 @@ Answer the question directly and naturally, as if the applicant is writing it th
             font-weight: 600;
             cursor: pointer;
           ">Close</button>
-          ${isPremiumUser ? '' : ''}
         </div>
       </div>
     `;
@@ -1867,54 +1829,10 @@ Answer the question directly and naturally, as if the applicant is writing it th
     });
 
     document.body.appendChild(modal);
-
-    // Draw pie chart
-    setTimeout(() => {
-      drawPieChart('resaid-pie-chart', pieData);
-    }, 100);
-  }
-
-  // Draw pie chart using Canvas API
-  function drawPieChart(canvasId, data) {
-    const canvas = document.getElementById(canvasId);
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = Math.min(centerX, centerY) - 10;
-
-    let startAngle = -Math.PI / 2; // Start from top
-
-    data.forEach(item => {
-      const percentage = item.value / 100;
-      const endAngle = startAngle + (percentage * 2 * Math.PI);
-
-      // Draw slice
-      ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.arc(centerX, centerY, radius, startAngle, endAngle);
-      ctx.closePath();
-      ctx.fillStyle = item.color;
-      ctx.fill();
-
-      // Draw border
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      startAngle = endAngle;
-    });
-
-    // Draw center circle for donut effect
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius * 0.6, 0, 2 * Math.PI);
-    ctx.fillStyle = 'white';
-    ctx.fill();
   }
 
   // Show floating fit score badge on page (now triggers modal)
-  function showFitScoreBadge(scoreData) {
+  function showFitScoreBadge() {
     // Remove existing badge
     const existing = document.getElementById('resaid-fit-badge');
     if (existing) existing.remove();
@@ -1937,10 +1855,6 @@ Answer the question directly and naturally, as if the applicant is writing it th
       min-width: 180px;
     `;
 
-    const score = scoreData.overallScore;
-    const color = score >= 75 ? '#4CAF50' : score >= 50 ? '#FF9800' : '#f44336';
-
-    const components = scoreData.scoreComponents;
     badge.innerHTML = `
       <button class="resaid-badge-close" aria-label="Dismiss fit score" style="
         position: absolute;
@@ -1953,13 +1867,9 @@ Answer the question directly and naturally, as if the applicant is writing it th
         line-height: 1;
         cursor: pointer;
       ">×</button>
-      <div style="font-size: 11px; opacity: 0.9; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">Resume-Job Fit</div>
-      <div style="font-size: 36px; font-weight: 700; line-height: 1; margin-bottom: 8px;">${score}%</div>
-      <div style="font-size: 10px; opacity: 0.8; margin-bottom: 8px;">
-        Skills: ${components.skillsMatch}% • 
-        Experience: ${components.experienceRelevance}%
-      </div>
-      <div style="font-size: 9px; opacity: 0.7; margin-top: 8px; text-align: center;">Click for detailed analysis</div>
+      <div style="font-size: 11px; opacity: 0.9; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Resume-Job Fit</div>
+      <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Click to see resume Job-fit score</div>
+      <div style="font-size: 9px; opacity: 0.7; text-align: center;">Opens a loading view while scores are generated.</div>
     `;
 
     badge.addEventListener('mouseenter', () => {
@@ -1982,7 +1892,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
 
     badge.addEventListener('click', () => {
       // Show detailed modal instead of opening popup
-      showFitScoreModal(scoreData);
+      showFitScoreModal();
     });
 
     // Slide in animation

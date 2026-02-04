@@ -4,6 +4,7 @@ let currentTab = null;
 let isPremiumUser = false;
 let hasFitAccess = false;
 let lastPremiumAnalysisKey = null;
+let explanationVisible = false;
 const premiumAnalysisCacheKey = 'premiumAnalysisCache';
 
 function buildPremiumCacheKey(resumeId, jobDescriptionText) {
@@ -187,6 +188,19 @@ function displayScoreBreakdown(scoreData) {
   if (gapSection) gapSection.style.display = 'none';
 }
 
+function setFitScoreLoading(isLoading) {
+  const loading = document.getElementById('fitScoreLoading');
+  const insights = document.getElementById('scoreInsights');
+  if (loading) loading.style.display = isLoading ? 'block' : 'none';
+  if (insights) insights.style.display = isLoading ? 'none' : 'block';
+  if (isLoading) {
+    ['skillsScore', 'expScore', 'roleScore', 'seniorityScore', 'educationScore', 'certScore', 'keywordScore'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '--';
+    });
+  }
+}
+
 // Display skills gap analysis
 function displaySkillsGap(scoreData) {
   const gapSection = document.getElementById('skillsGapSection');
@@ -298,7 +312,10 @@ function updatePremiumUI(isPremium) {
 }
 
 function buildPremiumPrompt(jobDescription, resumeText) {
-  return `I want you as an experienced resume reviewer and senior hiring manager to compare the job description and resume, and then out of 100% by breaking down the comparisons of key categories:
+  return `I want you to act as an experienced resume reviewer and senior hiring manager.
+
+Compare the job description and the resume. Calculate a match score out of 100% by breaking it down into the following fixed categories and weights:
+
 Skills 35%
 Experience 25%
 Role 15%
@@ -307,21 +324,26 @@ Education 8%
 Certifications 5%
 Keywords 5%
 
-I want the outputs for each percentage so they can be stored in the popup and displayed, as well as an explanation of what is bad about this resume and suggestions, in up to 0-10 points. If the resume and job description align perfectly, we do not need to make false suggestions or nitpick extremely hard. I want no diagrams and keep the response as simple by ONLY outputting the percentage of each with their category:
+For each category, output only the calculated percentage, using exactly the following format and nothing else:
 
-Skills: <calculated_skills_percentage>
-Experience: <calculated_experience_percentage>
-Role: <calculated_role_percentage>
-Seniority: <calculated_seniority_percentage>
-Education: <calculated_education_percentage>
-Certifications: <calculated_certification_percentage>
-Keywords: <calculated_keywords_percentage>
+Skills: <calculated_skills_percentage>%
+Experience: <calculated_experience_percentage>%
+Role: <calculated_role_percentage>%
+Seniority: <calculated_seniority_percentage>%
+Education: <calculated_education_percentage>%
+Certifications: <calculated_certification_percentage>%
+Keywords: <calculated_keywords_percentage>%
 
-The explanation of what is bad about this resume and suggestions, in up to 0-10 points should be in the format of:
+After the percentages, output a section titled Explanation.
 
-<Point 1>
-<Point 2>
-<Point n>
+Under Explanation, list 0–10 concise bullet points describing only genuine gaps or improvement opportunities.
+
+Do not include summaries, conclusions, commentary, evaluations, praise, or meta statements.
+Do not restate the job description or resume.
+Do not include sentences that characterize the overall strength or weakness of the resume.
+Do not add filler text, framing sentences, or headings other than Explanation.
+
+If the resume aligns well with the job description, output fewer explanation points or none at all rather than inventing issues.
 
 Job Description:
 ${jobDescription ? jobDescription.substring(0, 6000) : ''}
@@ -350,11 +372,11 @@ function parseFitAnalysisResponse(text) {
     return null;
   }
 
-  const explanationPoints = text
+  const explanationSection = text.split(/Explanation\s*:\s*/i)[1] || '';
+  const explanationPoints = explanationSection
     .split(/\r?\n/)
     .map(line => line.trim())
     .filter(line => line.length > 0)
-    .filter(line => !/^(Skills|Experience|Role|Seniority|Education|Certifications|Keywords)\s*:/i.test(line))
     .map(line => line.replace(/^[-•\d.\s]+/, '').trim())
     .filter(line => line.length > 0);
 
@@ -389,6 +411,7 @@ function computeOverallScore(scoreComponents) {
 async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
   const premiumText = document.getElementById('premiumAnalysisText');
   if (!premiumText) return null;
+  premiumText.style.display = 'none';
   const { forceRefresh = false } = options;
   const resumeId = document.getElementById('resumeSelect')?.value || '';
   const cacheKey = buildPremiumCacheKey(resumeId, jobDescriptionText);
@@ -428,6 +451,9 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
 
   const prompt = buildPremiumPrompt(jobDescriptionText, resumeText);
   premiumText.textContent = 'Generating explanation...';
+  explanationVisible = false;
+  const refreshButton = document.getElementById('refreshPremiumAnalysis');
+  if (refreshButton) refreshButton.textContent = 'Show Explanation';
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -515,7 +541,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (refreshPremiumAnalysis) {
     refreshPremiumAnalysis.addEventListener('click', () => {
-      calculateFitScore({ forceRefresh: true });
+      const premiumText = document.getElementById('premiumAnalysisText');
+      if (!premiumText) return;
+      if (premiumText.textContent === 'Generate a detailed explanation for this match.') {
+        calculateFitScore({ forceRefresh: true });
+        return;
+      }
+      if (!explanationVisible) {
+        premiumText.style.display = 'block';
+        refreshPremiumAnalysis.textContent = 'Hide Explanation';
+        explanationVisible = true;
+        return;
+      }
+      premiumText.style.display = 'none';
+      refreshPremiumAnalysis.textContent = 'Show Explanation';
+      explanationVisible = false;
     });
   }
 
@@ -893,8 +933,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!forceRefresh && lastPremiumAnalysisKey === analysisKey) return;
       lastPremiumAnalysisKey = analysisKey;
 
+      explanationVisible = false;
+      const refreshButton = document.getElementById('refreshPremiumAnalysis');
+      if (refreshButton) refreshButton.textContent = 'Show Explanation';
+      const premiumText = document.getElementById('premiumAnalysisText');
+      if (premiumText) premiumText.style.display = 'none';
+
+      setFitScoreLoading(true);
       const analysisResult = await generatePremiumAnalysis(jobDescription.text, { forceRefresh });
       if (!analysisResult || !analysisResult.scoreComponents) {
+        setFitScoreLoading(false);
         updatePremiumUI(isPremiumUser);
         return;
       }
@@ -907,6 +955,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       animateScoreMeter(scoreData.overallScore);
       displayScoreBreakdown(scoreData);
+      setFitScoreLoading(false);
       lastScoreData = scoreData;
       lastJobDescriptionText = jobDescription?.text || '';
       updatePremiumUI(isPremiumUser);
