@@ -1878,8 +1878,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
     }
 
     badge.addEventListener('click', () => {
-      // Show detailed modal instead of opening popup
-      showFitScoreModal();
+      chrome.runtime.sendMessage({ type: 'OPEN_POPUP' });
     });
 
     // Slide in animation
