@@ -596,24 +596,36 @@
       const jobData = normalizeJobDescription(jobDescription);
       const resume = normalizeResume(resumeData);
 
-      // Score 6 components (weighted by importance)
+      // Score components (weighted by importance)
       const skillsScore = scoreSkillsMatch(resume.skills, jobData.requiredSkills, jobData.preferredSkills);
       const experienceScore = scoreExperienceRelevance(resume.experiences, jobData.responsibilities, jobData.domain);
       const roleScore = scoreRoleAlignment(resume.titles, jobData.jobTitle);
       const seniorityScore = scoreSeniorityMatch(resume.yearsOfExperience, jobData.seniorityLevel);
       const educationScore = scoreEducationMatch(resume.education, jobData.educationRequirements);
+      const certificationScore = scoreCertificationMatch(resume.certifications, jobData.certificationRequirements);
       const keywordScore = scoreKeywordCoverage(resume.allText, jobDescription);
 
-      // Weighted composite (Skills 40%, Exp 25%, Role 15%, Seniority 5%, Edu 5%, Keywords 10%)
-      const overallScore = (
-        skillsScore * 0.40 +
+      // Weighted composite (Skills 35%, Exp 25%, Role 15%, Seniority 7%, Edu 8%, Certs 5%, Keywords 5%)
+      const baseScore = (
+        skillsScore * 0.35 +
         experienceScore * 0.25 +
         roleScore * 0.15 +
-        seniorityScore * 0.05 +
-        educationScore * 0.05 +
-        keywordScore * 0.10
+        seniorityScore * 0.07 +
+        educationScore * 0.08 +
+        certificationScore * 0.05 +
+        keywordScore * 0.05
       );
 
+      const requirementsPenalty = calculateRequirementsPenalty({
+        missingRequiredSkills: jobData.requiredSkills.filter(
+          skill => !resume.skills.some(rs => skillMatchScore(rs, skill) > 0.3)
+        ).length,
+        totalRequiredSkills: jobData.requiredSkills.length,
+        educationRequired: jobData.educationRequirements.length > 0,
+        educationScore
+      });
+
+      const overallScore = Math.max(baseScore - requirementsPenalty, 0);
       const normalizedScore = Math.round(overallScore * 100);
 
       // Get missing skills for recommendations
@@ -626,12 +638,13 @@
       console.log('═══════════════════════════════════════════════════════════════');
       console.log(`\n🎯 Overall Fit Score: ${normalizedScore}%`);
       console.log(`\nComponent Breakdown:`);
-      console.log(`   • Skills Match: ${Math.round(skillsScore * 100)}% (40% weight)`);
+      console.log(`   • Skills Match: ${Math.round(skillsScore * 100)}% (35% weight)`);
       console.log(`   • Experience Relevance: ${Math.round(experienceScore * 100)}% (25% weight)`);
       console.log(`   • Role Alignment: ${Math.round(roleScore * 100)}% (15% weight)`);
-      console.log(`   • Seniority Match: ${Math.round(seniorityScore * 100)}% (5% weight)`);
-      console.log(`   • Education Match: ${Math.round(educationScore * 100)}% (5% weight)`);
-      console.log(`   • Keyword Coverage: ${Math.round(keywordScore * 100)}% (10% weight)`);
+      console.log(`   • Seniority Match: ${Math.round(seniorityScore * 100)}% (7% weight)`);
+      console.log(`   • Education Match: ${Math.round(educationScore * 100)}% (8% weight)`);
+      console.log(`   • Certification Match: ${Math.round(certificationScore * 100)}% (5% weight)`);
+      console.log(`   • Keyword Coverage: ${Math.round(keywordScore * 100)}% (5% weight)`);
       
       if (missingSkills.length > 0) {
         console.log(`\nMissing Skills: ${missingSkills.slice(0, 3).join(', ')}`);
@@ -642,7 +655,7 @@
         console.log(`\nStrengths: ${strengths.join(', ')}`);
       }
 
-      const recommendations = getRecommendations(missingSkills, experienceScore, educationScore);
+      const recommendations = getRecommendations(missingSkills, experienceScore, educationScore, certificationScore);
       if (recommendations.length > 0) {
         console.log(`\nRecommendations: ${recommendations.join('; ')}`);
       }
@@ -656,6 +669,7 @@
           roleAlignment: Math.round(roleScore * 100),
           seniorityMatch: Math.round(seniorityScore * 100),
           educationMatch: Math.round(educationScore * 100),
+          certificationMatch: Math.round(certificationScore * 100),
           keywordCoverage: Math.round(keywordScore * 100)
         },
         missingSkills: missingSkills.slice(0, 3),
@@ -691,6 +705,7 @@
 
     // Extract education requirements
     const educationRequirements = extractEducationRequirements(lower);
+    const certificationRequirements = extractCertificationRequirements(lower);
 
     return {
       jobTitle: jobTitle.trim(),
@@ -699,7 +714,8 @@
       responsibilities,
       seniorityLevel,
       domain,
-      educationRequirements
+      educationRequirements,
+      certificationRequirements
     };
   }
 
@@ -708,6 +724,7 @@
     const skills = (resumeData.skills || []).map(s => typeof s === 'string' ? s.trim() : s);
     const experiences = resumeData.experiences || [];
     const education = resumeData.education || [];
+    const certifications = normalizeCertifications(resumeData);
     const titles = experiences.map(e => e.title || '').filter(Boolean);
     
     // Calculate years of experience if not provided
@@ -729,13 +746,15 @@
       ...skills,
       ...titles,
       ...experiences.map(e => e.description || ''),
-      ...education.map(e => e.field || '')
+      ...education.map(e => e.field || ''),
+      ...certifications
     ].join(' ').toLowerCase();
 
     return {
       skills,
       experiences,
       education,
+      certifications,
       titles,
       yearsOfExperience,
       allText
@@ -743,6 +762,7 @@
   }
 
   function scoreSkillsMatch(resumeSkills, requiredSkills, preferredSkills) {
+    if (resumeSkills.length === 0) return requiredSkills.length > 0 ? 0.2 : 0.8;
     if (requiredSkills.length === 0) return 0.8; // No skills specified
 
     let score = 0;
@@ -869,42 +889,59 @@
 
   function scoreEducationMatch(resumeEducation, jobEducationReqs) {
     if (!jobEducationReqs || jobEducationReqs.length === 0) return 0.95; // Not required
-    if (resumeEducation.length === 0) return 0.5; // No education listed
+    if (resumeEducation.length === 0) return 0.3; // No education listed
 
-    const eduText = resumeEducation.map(e => (e.field || '') + ' ' + (e.degree || '')).join(' ').toLowerCase();
-    
-    let matches = 0;
+    const resumeDegrees = normalizeResumeDegrees(resumeEducation);
+    let total = 0;
+    let matched = 0;
+
     for (const req of jobEducationReqs) {
-      if (eduText.includes(req.toLowerCase())) {
-        matches++;
+      total++;
+      const requirementScore = scoreSingleEducationRequirement(req, resumeDegrees);
+      if (requirementScore > 0.5) {
+        matched += requirementScore;
+      } else {
+        matched += requirementScore;
       }
     }
 
-    return matches > 0 ? Math.min(matches / jobEducationReqs.length, 1.0) : 0.6;
+    return total > 0 ? Math.min(matched / total, 1.0) : 0.6;
+  }
+
+  function scoreCertificationMatch(resumeCertifications, jobCertifications) {
+    if (!jobCertifications || jobCertifications.length === 0) return 0.9;
+    if (!resumeCertifications || resumeCertifications.length === 0) return 0.4;
+
+    let matches = 0;
+    for (const cert of jobCertifications) {
+      const found = resumeCertifications.some(rc => rc.includes(cert) || cert.includes(rc));
+      if (found) matches++;
+    }
+
+    return matches > 0 ? Math.min(matches / jobCertifications.length, 1.0) : 0.4;
   }
 
   function scoreKeywordCoverage(resumeText, jobDescription) {
-    const jobKeywords = jobDescription.toLowerCase().match(/\\b[a-z]+(?:\\s+[a-z]+)?\\b/g) || [];
+    const jobKeywords = jobDescription.toLowerCase().match(/\\b[a-z][a-z0-9+.#/\\-]{2,}\\b/g) || [];
+    const stopwords = new Set(['and', 'the', 'with', 'for', 'from', 'that', 'this', 'your', 'you', 'are', 'will', 'our', 'their', 'they', 'have', 'has', 'had', 'but', 'not', 'all', 'any', 'can', 'may', 'able', 'ability', 'role', 'work', 'team']);
     const keywordFreq = {};
-    
+
     for (const word of jobKeywords) {
-      if (word.length > 3) { // Ignore small words
+      if (!stopwords.has(word)) {
         keywordFreq[word] = (keywordFreq[word] || 0) + 1;
       }
     }
 
-    let matches = 0;
     const importantKeywords = Object.entries(keywordFreq)
-      .filter(([_, freq]) => freq >= 2) // Keywords appearing 2+ times
+      .filter(([_, freq]) => freq >= 2)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 25)
       .map(([word]) => word);
 
-    for (const keyword of importantKeywords) {
-      if (resumeText.includes(keyword)) {
-        matches++;
-      }
-    }
+    if (importantKeywords.length === 0) return 0.8;
 
-    return importantKeywords.length > 0 ? matches / importantKeywords.length : 0.8;
+    const matched = importantKeywords.filter(keyword => resumeText.includes(keyword)).length;
+    return matched / importantKeywords.length;
   }
 
   // Helper: Extract skills from text
@@ -921,8 +958,8 @@
       }
     }
 
-    const section = text.substring(start, start + 1000);
-    const skillPattern = /(?:^|[-•*]|\\n)\\s*([A-Za-z0-9#/+.\\-\\s,&()]+?)(?=[\\n•*-]|$)/gm;
+    const section = text.substring(start, start + 1200);
+    const skillPattern = /(?:^|[-•*]|\\n|,|;)\\s*([A-Za-z0-9#/+.\\-\\s,&()]+?)(?=[\\n•*;,]|$)/gm;
     
     const skills = [];
     let match;
@@ -933,7 +970,7 @@
       }
     }
 
-    return skills;
+    return dedupeStrings(skills);
   }
 
   // Helper: Extract bullet points (responsibilities)
@@ -968,14 +1005,143 @@
   // Helper: Extract education requirements
   function extractEducationRequirements(text) {
     const requirements = [];
-    const degreePattern = /(bachelor|master|phd|b\\.?s|m\\.?s|b\\.?a|m\\.?a)\\s+(in\\s+)?([a-z\\s&-]+)/gi;
-    
-    let match;
-    while ((match = degreePattern.exec(text))) {
-      requirements.push(match[0].trim());
+    const degreePattern = /(bachelor|master|phd|associate|b\\.?s|m\\.?s|b\\.?a|m\\.?a|m\\.?eng|b\\.?eng)\\s+(degree\\s+)?(in\\s+)?([a-z\\s&-]+)/gi;
+    const lines = text.split(/\\n|\\.|;/g);
+
+    for (const line of lines) {
+      const hasDegree = degreePattern.test(line);
+      degreePattern.lastIndex = 0;
+      if (!hasDegree) continue;
+      let match;
+      while ((match = degreePattern.exec(line))) {
+        requirements.push(normalizeEducationRequirement(match[0], line));
+      }
     }
 
     return requirements;
+  }
+
+  function extractCertificationRequirements(text) {
+    const certs = [];
+    const certKeywords = ['certification', 'certified', 'certificate'];
+    const knownCerts = ['aws', 'azure', 'gcp', 'pmp', 'scrum', 'csm', 'ckad', 'cka', 'ccna', 'security+'];
+
+    const lines = text.split(/\\n|\\.|;/g);
+    for (const line of lines) {
+      const lowerLine = line.toLowerCase();
+      if (!certKeywords.some(word => lowerLine.includes(word)) && !knownCerts.some(cert => lowerLine.includes(cert))) {
+        continue;
+      }
+      const matches = lowerLine.match(/[a-z0-9+\\-\\s]{3,}/g) || [];
+      for (const match of matches) {
+        const cleaned = match.trim();
+        if (knownCerts.some(cert => cleaned.includes(cert))) {
+          certs.push(cleaned);
+        }
+      }
+    }
+
+    return dedupeStrings(certs);
+  }
+
+  function normalizeEducationRequirement(requirementText, contextLine) {
+    const lower = requirementText.toLowerCase();
+    const level = normalizeDegreeLevel(lower);
+    const fieldMatch = requirementText.match(/in\\s+([a-z\\s&-]+)/i);
+    const field = fieldMatch ? fieldMatch[1].trim().toLowerCase() : '';
+    const isRequired = /(required|must|minimum)/i.test(contextLine);
+
+    return {
+      raw: requirementText.trim(),
+      level,
+      field,
+      isRequired
+    };
+  }
+
+  function normalizeResumeDegrees(resumeEducation) {
+    return resumeEducation.map(entry => {
+      const degreeText = `${entry.degree || ''} ${entry.field || ''}`.trim().toLowerCase();
+      return {
+        raw: degreeText,
+        level: normalizeDegreeLevel(degreeText),
+        field: (entry.field || '').trim().toLowerCase()
+      };
+    }).filter(entry => entry.raw);
+  }
+
+  function normalizeDegreeLevel(text) {
+    if (!text) return '';
+    if (text.includes('phd') || text.includes('doctor')) return 'phd';
+    if (text.includes('master') || text.includes('m.s') || text.includes('m.s.') || text.includes('m.a') || text.includes('m.a.') || text.includes('m.eng')) return 'master';
+    if (text.includes('bachelor') || text.includes('b.s') || text.includes('b.s.') || text.includes('b.a') || text.includes('b.a.') || text.includes('b.eng')) return 'bachelor';
+    if (text.includes('associate') || text.includes('a.s') || text.includes('a.a')) return 'associate';
+    return '';
+  }
+
+  function scoreSingleEducationRequirement(requirement, resumeDegrees) {
+    if (!requirement || resumeDegrees.length === 0) return 0.2;
+
+    const requiredLevel = requirement.level;
+    const requiredField = requirement.field;
+    let bestScore = 0;
+
+    for (const degree of resumeDegrees) {
+      const levelScore = compareDegreeLevels(degree.level, requiredLevel);
+      const fieldScore = requiredField ? compareDegreeFields(degree.field, requiredField) : 0.85;
+      const score = Math.min((levelScore * 0.6) + (fieldScore * 0.4), 1.0);
+      if (score > bestScore) bestScore = score;
+    }
+
+    return bestScore;
+  }
+
+  function compareDegreeLevels(resumeLevel, requiredLevel) {
+    if (!requiredLevel) return 0.9;
+    const order = ['associate', 'bachelor', 'master', 'phd'];
+    const resumeIndex = order.indexOf(resumeLevel);
+    const requiredIndex = order.indexOf(requiredLevel);
+    if (resumeIndex === -1 || requiredIndex === -1) return 0.6;
+    if (resumeIndex >= requiredIndex) return 1.0;
+    return Math.max(0.4, 0.7 - (requiredIndex - resumeIndex) * 0.2);
+  }
+
+  function compareDegreeFields(resumeField, requiredField) {
+    if (!requiredField) return 0.85;
+    if (!resumeField) return 0.6;
+    if (resumeField === requiredField) return 1.0;
+    if (resumeField.includes(requiredField) || requiredField.includes(resumeField)) return 0.85;
+    const relatedFields = {
+      'computer science': ['software', 'computer engineering', 'information technology', 'informatics'],
+      'data science': ['statistics', 'mathematics', 'computer science', 'analytics'],
+      'electrical engineering': ['computer engineering', 'electronics'],
+      'business': ['finance', 'economics', 'management']
+    };
+    const related = relatedFields[requiredField] || [];
+    if (related.some(field => resumeField.includes(field))) return 0.75;
+    return 0.5;
+  }
+
+  function normalizeCertifications(resumeData) {
+    const raw = resumeData.certifications || resumeData.certificates || [];
+    if (!Array.isArray(raw)) return [];
+    return raw.map(cert => String(cert).toLowerCase().trim()).filter(Boolean);
+  }
+
+  function calculateRequirementsPenalty({ missingRequiredSkills, totalRequiredSkills, educationRequired, educationScore }) {
+    let penalty = 0;
+    if (totalRequiredSkills > 0) {
+      const missingRatio = missingRequiredSkills / totalRequiredSkills;
+      penalty += Math.min(missingRatio * 0.25, 0.25);
+    }
+    if (educationRequired && educationScore < 0.6) {
+      penalty += 0.08;
+    }
+    return penalty;
+  }
+
+  function dedupeStrings(items) {
+    return [...new Set(items.map(item => item.trim()).filter(Boolean))];
   }
 
   function getStrengths(skillsScore, experienceScore, roleScore, seniorityScore) {
@@ -987,7 +1153,7 @@
     return strengths;
   }
 
-  function getRecommendations(missingSkills, experienceScore, educationScore) {
+  function getRecommendations(missingSkills, experienceScore, educationScore, certificationScore) {
     const recommendations = [];
     if (missingSkills.length > 0) {
       recommendations.push(`Add ${missingSkills.slice(0, 2).join(', ')} to resume`);
@@ -997,6 +1163,9 @@
     }
     if (educationScore < 0.7) {
       recommendations.push('Highlight relevant certifications');
+    }
+    if (certificationScore < 0.6) {
+      recommendations.push('Add required certifications if available');
     }
     return recommendations;
   }
