@@ -2,7 +2,19 @@
 
 let currentTab = null;
 let isPremiumUser = false;
+let hasFitAccess = false;
 let lastPremiumAnalysisKey = null;
+const premiumAnalysisCacheKey = 'premiumAnalysisCache';
+
+function buildPremiumCacheKey(resumeId, jobDescriptionText) {
+  const normalized = `${resumeId || 'unknown'}|${jobDescriptionText || ''}`.toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    hash = (hash << 5) - hash + normalized.charCodeAt(i);
+    hash |= 0;
+  }
+  return `premium:${hash}`;
+}
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async function() {
@@ -162,40 +174,17 @@ function displayScoreBreakdown(scoreData) {
   document.getElementById('skillsScore').textContent = scoreData.scoreComponents.skillsMatch + '%';
   document.getElementById('expScore').textContent = scoreData.scoreComponents.experienceRelevance + '%';
   document.getElementById('roleScore').textContent = scoreData.scoreComponents.roleAlignment + '%';
+  document.getElementById('seniorityScore').textContent = scoreData.scoreComponents.seniorityMatch + '%';
+  document.getElementById('educationScore').textContent = scoreData.scoreComponents.educationMatch + '%';
+  document.getElementById('certScore').textContent = scoreData.scoreComponents.certificationMatch + '%';
+  document.getElementById('keywordScore').textContent = scoreData.scoreComponents.keywordCoverage + '%';
   
   // Display insights
   const insightsContainer = document.getElementById('scoreInsights');
   insightsContainer.innerHTML = '';
-  
-  // Strengths
-  if (scoreData.strengths && scoreData.strengths.length > 0) {
-    scoreData.strengths.slice(0, 2).forEach(strength => {
-      const item = document.createElement('div');
-      item.className = 'insight-item';
-      item.innerHTML = `${strength}`;
-      insightsContainer.appendChild(item);
-    });
-  }
-  
-  // Missing skills
-  if (scoreData.missingSkills && scoreData.missingSkills.length > 0) {
-    const item = document.createElement('div');
-    item.className = 'insight-item insight-missing';
-    item.innerHTML = `⚠ Missing: ${scoreData.missingSkills.join(', ')}`;
-    insightsContainer.appendChild(item);
-  }
-  
-  // Display skills gap analysis
-  displaySkillsGap(scoreData);
-  
-  // Recommendations
-  if (scoreData.recommendations && scoreData.recommendations.length > 0) {
-    const rec = scoreData.recommendations[0];
-    const item = document.createElement('div');
-    item.className = 'insight-item';
-    item.innerHTML = `💡 ${rec}`;
-    insightsContainer.appendChild(item);
-  }
+
+  const gapSection = document.getElementById('skillsGapSection');
+  if (gapSection) gapSection.style.display = 'none';
 }
 
 // Display skills gap analysis
@@ -303,44 +292,126 @@ function updatePremiumUI(isPremium) {
   const locked = document.getElementById('premiumLocked');
   const analysis = document.getElementById('premiumAnalysisSection');
 
-  if (breakdown) breakdown.style.display = isPremium ? 'block' : 'none';
-  if (locked) locked.style.display = isPremium ? 'none' : 'block';
-  if (analysis) analysis.style.display = isPremium ? 'block' : 'none';
+  if (breakdown) breakdown.style.display = hasFitAccess ? 'block' : 'none';
+  if (locked) locked.style.display = hasFitAccess ? 'none' : 'block';
+  if (analysis) analysis.style.display = hasFitAccess ? 'block' : 'none';
 }
 
-function buildPremiumPrompt(jobDescription, resumeText, scoreData) {
-  const scoreSummary = scoreData?.scoreComponents
-    ? `Score components: Skills Match ${scoreData.scoreComponents.skillsMatch}%, Experience ${scoreData.scoreComponents.experienceRelevance}%, Role Alignment ${scoreData.scoreComponents.roleAlignment}%.`
-    : '';
+function buildPremiumPrompt(jobDescription, resumeText) {
+  return `I want you as an experienced resume reviewer and senior hiring manager to compare the job description and resume, and then out of 100% by breaking down the comparisons of key categories:
+Skills 35%
+Experience 25%
+Role 15%
+Seniority 7%
+Education 8%
+Certifications 5%
+Keywords 5%
 
-  return `Assume you are an expert resume writer with 20 years of experience helping tech professionals land their dream job at Google, Amazon, and other FAANG companies.
+I want the outputs for each percentage so they can be stored in the popup and displayed, as well as an explanation of what is bad about this resume and suggestions, in up to 0-10 points. If the resume and job description align perfectly, we do not need to make false suggestions or nitpick extremely hard. I want no diagrams and keep the response as simple by ONLY outputting the percentage of each with their category:
 
-Analyze the resume against the job description and explain what is weak or missing. Follow the rules:
-- See if the bulleted points clearly show a connection between the skills/experience and the job's preferred/basic qualifications.
-- List relevant accomplishments or significant tasks performed that are most closely related to the job I am applying for.
-- Highlight relevant transferable skills.
-- Do not put company names or dates.
-- Do not include skills and experience that aren't supported by the resume.
-- Please don't utilize an Em-Dash unless it is the only grammatically correct option.
+Skills: <calculated_skills_percentage>
+Experience: <calculated_experience_percentage>
+Role: <calculated_role_percentage>
+Seniority: <calculated_seniority_percentage>
+Education: <calculated_education_percentage>
+Certifications: <calculated_certification_percentage>
+Keywords: <calculated_keywords_percentage>
 
-Output format:
-1) Key gaps (bullet list)
-2) Missing evidence from the resume (bullet list)
-3) What to emphasize or add (bullet list)
+The explanation of what is bad about this resume and suggestions, in up to 0-10 points should be in the format of:
 
-${scoreSummary}
-
-Resume:
-${resumeText ? resumeText.substring(0, 6000) : ''}
+<Point 1>
+<Point 2>
+<Point n>
 
 Job Description:
-${jobDescription ? jobDescription.substring(0, 6000) : ''}`;
+${jobDescription ? jobDescription.substring(0, 6000) : ''}
+
+Resume:
+${resumeText ? resumeText.substring(0, 6000) : ''}`;
 }
 
-async function generatePremiumAnalysis(jobDescriptionText, scoreData) {
-  if (!isPremiumUser) return;
+function parseFitAnalysisResponse(text) {
+  if (!text) return null;
+  const extract = (label) => {
+    const regex = new RegExp(`${label}\\s*:\\s*(\\d{1,3})%`, 'i');
+    const match = text.match(regex);
+    return match ? Math.min(parseInt(match[1], 10), 100) : null;
+  };
+
+  const skills = extract('Skills');
+  const experience = extract('Experience');
+  const role = extract('Role');
+  const seniority = extract('Seniority');
+  const education = extract('Education');
+  const certifications = extract('Certifications');
+  const keywords = extract('Keywords');
+
+  if ([skills, experience, role, seniority, education, certifications, keywords].some(value => value === null)) {
+    return null;
+  }
+
+  const explanationPoints = text
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .filter(line => !/^(Skills|Experience|Role|Seniority|Education|Certifications|Keywords)\s*:/i.test(line))
+    .map(line => line.replace(/^[-•\d.\s]+/, '').trim())
+    .filter(line => line.length > 0);
+
+  const scoreComponents = {
+    skillsMatch: skills,
+    experienceRelevance: experience,
+    roleAlignment: role,
+    seniorityMatch: seniority,
+    educationMatch: education,
+    certificationMatch: certifications,
+    keywordCoverage: keywords
+  };
+
+  return {
+    scoreComponents,
+    explanationPoints
+  };
+}
+
+function computeOverallScore(scoreComponents) {
+  return Math.round(
+    scoreComponents.skillsMatch * 0.35 +
+    scoreComponents.experienceRelevance * 0.25 +
+    scoreComponents.roleAlignment * 0.15 +
+    scoreComponents.seniorityMatch * 0.07 +
+    scoreComponents.educationMatch * 0.08 +
+    scoreComponents.certificationMatch * 0.05 +
+    scoreComponents.keywordCoverage * 0.05
+  );
+}
+
+async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
   const premiumText = document.getElementById('premiumAnalysisText');
-  if (!premiumText) return;
+  if (!premiumText) return null;
+  const { forceRefresh = false } = options;
+  const resumeId = document.getElementById('resumeSelect')?.value || '';
+  const cacheKey = buildPremiumCacheKey(resumeId, jobDescriptionText);
+
+  if (!forceRefresh) {
+    const cached = await chrome.storage.local.get([premiumAnalysisCacheKey]);
+    const cachedEntry = cached[premiumAnalysisCacheKey]?.[cacheKey];
+    if (cachedEntry?.content && cachedEntry?.scoreComponents) {
+      premiumText.textContent = cachedEntry.content;
+      return cachedEntry;
+    }
+  }
+
+  if (!isPremiumUser) {
+    const usage = await chrome.storage.sync.get(['fitFreeUsageCount']);
+    const count = usage.fitFreeUsageCount || 0;
+    if (count >= 1) {
+      premiumText.textContent = 'Free fit analysis used. Upgrade to premium for more.';
+      hasFitAccess = false;
+      updatePremiumUI(isPremiumUser);
+      return null;
+    }
+  }
 
   const settings = await chrome.storage.sync.get(['aiApiKey', 'aiModel', 'aiEnabled']);
   if (!settings.aiApiKey || settings.aiEnabled === false) {
@@ -355,7 +426,7 @@ async function generatePremiumAnalysis(jobDescriptionText, scoreData) {
     return;
   }
 
-  const prompt = buildPremiumPrompt(jobDescriptionText, resumeText, scoreData);
+  const prompt = buildPremiumPrompt(jobDescriptionText, resumeText);
   premiumText.textContent = 'Generating explanation...';
 
   try {
@@ -376,15 +447,44 @@ async function generatePremiumAnalysis(jobDescriptionText, scoreData) {
     if (!response.ok) {
       const errorText = await response.text();
       premiumText.textContent = `Failed to generate explanation: ${response.status} ${errorText}`;
-      return;
+      return null;
     }
 
     const data = await response.json();
     const content = data?.choices?.[0]?.message?.content?.trim() || '';
-    premiumText.textContent = content || 'No explanation returned.';
+    const parsed = parseFitAnalysisResponse(content);
+    if (!parsed) {
+      premiumText.textContent = 'Could not parse the fit analysis response.';
+      return null;
+    }
+
+    const overallScore = computeOverallScore(parsed.scoreComponents);
+    const finalContent = parsed.explanationPoints.length > 0
+      ? parsed.explanationPoints.slice(0, 10).map(point => `• ${point}`).join('\n')
+      : 'No explanation returned.';
+
+    premiumText.textContent = finalContent;
+    const cached = await chrome.storage.local.get([premiumAnalysisCacheKey]);
+    const cacheMap = cached[premiumAnalysisCacheKey] || {};
+    cacheMap[cacheKey] = {
+      content: finalContent,
+      savedAt: Date.now(),
+      scoreComponents: parsed.scoreComponents,
+      overallScore
+    };
+    await chrome.storage.local.set({ [premiumAnalysisCacheKey]: cacheMap });
+    if (!isPremiumUser) {
+      const usage = await chrome.storage.sync.get(['fitFreeUsageCount']);
+      const count = usage.fitFreeUsageCount || 0;
+      await chrome.storage.sync.set({ fitFreeUsageCount: count + 1 });
+      hasFitAccess = false;
+      updatePremiumUI(isPremiumUser);
+    }
+    return cacheMap[cacheKey];
   } catch (error) {
     premiumText.textContent = 'Error generating premium explanation.';
     console.error('ResAid: Premium analysis error:', error);
+    return null;
   }
 }
 
@@ -415,7 +515,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (refreshPremiumAnalysis) {
     refreshPremiumAnalysis.addEventListener('click', () => {
-      generatePremiumAnalysis(lastJobDescriptionText, lastScoreData);
+      calculateFitScore({ forceRefresh: true });
     });
   }
 
@@ -783,58 +883,42 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Calculate and display fit score
-  async function calculateFitScore() {
+  async function calculateFitScore(options = {}) {
     const resumeId = resumeSelect.value;
     if (!resumeId || !jobDescription) return;
 
     try {
-      // Build resume data from stored onboarding info
-      const profile = await chrome.storage.sync.get([
-        'firstName','lastName','email','phone','city','country','linkedin',
-        'expectedSalary','yearsExperience','currentCompany','willingRelocate','workAuthorization','noticePeriod'
-      ]);
-      const resumeData = profile; // simple object used by scoring
+      const { forceRefresh = false } = options;
+      const analysisKey = `${resumeId}|${jobDescription?.text?.substring(0, 200) || ''}`;
+      if (!forceRefresh && lastPremiumAnalysisKey === analysisKey) return;
+      lastPremiumAnalysisKey = analysisKey;
 
-      // Send to background to calculate score (content.js has the scoring function)
-      const scoreResult = await chrome.runtime.sendMessage({
-        type: 'CALCULATE_FIT_SCORE',
-        data: {
-          jobDescription: jobDescription.text,
-          resumeData: resumeData
-        }
-      });
-
-      if (scoreResult && scoreResult.success && scoreResult.data) {
-        // Animate and display score
-        animateScoreMeter(scoreResult.data.overallScore);
-        displayScoreBreakdown(scoreResult.data);
-        lastScoreData = scoreResult.data;
-        lastJobDescriptionText = jobDescription?.text || '';
+      const analysisResult = await generatePremiumAnalysis(jobDescription.text, { forceRefresh });
+      if (!analysisResult || !analysisResult.scoreComponents) {
         updatePremiumUI(isPremiumUser);
-
-        if (isPremiumUser && lastJobDescriptionText) {
-          const analysisKey = `${lastJobDescriptionText.substring(0, 200)}|${scoreResult.data.overallScore}`;
-          if (lastPremiumAnalysisKey !== analysisKey) {
-            lastPremiumAnalysisKey = analysisKey;
-            generatePremiumAnalysis(lastJobDescriptionText, lastScoreData);
-          }
-        }
+        return;
       }
+
+      hasFitAccess = true;
+      const scoreData = {
+        overallScore: analysisResult.overallScore,
+        scoreComponents: analysisResult.scoreComponents
+      };
+
+      animateScoreMeter(scoreData.overallScore);
+      displayScoreBreakdown(scoreData);
+      lastScoreData = scoreData;
+      lastJobDescriptionText = jobDescription?.text || '';
+      updatePremiumUI(isPremiumUser);
     } catch (err) {
       console.error('Error calculating fit score:', err);
     }
   }
 
   isPremiumUser = await getSubscriptionStatus();
+  const usage = await chrome.storage.sync.get(['fitFreeUsageCount']);
+  hasFitAccess = isPremiumUser || (usage.fitFreeUsageCount || 0) < 1;
   updatePremiumUI(isPremiumUser);
-
-  if (isPremiumUser && lastJobDescriptionText && lastScoreData) {
-    const analysisKey = `${lastJobDescriptionText.substring(0, 200)}|${lastScoreData.overallScore}`;
-    if (lastPremiumAnalysisKey !== analysisKey) {
-      lastPremiumAnalysisKey = analysisKey;
-      generatePremiumAnalysis(lastJobDescriptionText, lastScoreData);
-    }
-  }
 });
 
 // AI status is managed in extension settings.
