@@ -1929,8 +1929,9 @@ Answer the question directly and naturally, as if the applicant is writing it th
       });
     }
 
-    badge.addEventListener('click', () => {
-      chrome.runtime.sendMessage({ type: 'OPEN_POPUP' });
+    badge.addEventListener('click', async () => {
+      const tabId = await getCurrentTabId();
+      chrome.runtime.sendMessage({ type: 'OPEN_POPUP', tabId });
     });
 
     // Slide in animation

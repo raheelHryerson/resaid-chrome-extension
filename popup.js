@@ -593,9 +593,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   let lastJobDescriptionText = '';
   // Backend API key removed. All data now uses local storage.
 
-  // Get current tab
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  currentTab = tabs[0];
+  // Get current tab (prefer explicit tabId when opened from badge)
+  const params = new URLSearchParams(window.location.search || '');
+  const explicitTabId = Number(params.get('tabId')) || null;
+  if (explicitTabId) {
+    try {
+      currentTab = await chrome.tabs.get(explicitTabId);
+    } catch (error) {
+      console.warn('ResAid: Failed to resolve explicit tabId, falling back to active tab.', error);
+    }
+  }
+  if (!currentTab) {
+    const session = await chrome.storage.session.get(['popupTabId']);
+    if (session.popupTabId) {
+      try {
+        currentTab = await chrome.tabs.get(session.popupTabId);
+      } catch (error) {
+        console.warn('ResAid: Failed to resolve session tabId, falling back to active tab.', error);
+      }
+    }
+  }
+  if (!currentTab) {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    currentTab = tabs[0];
+  }
 
   if (premiumUpgradeBtn) {
     premiumUpgradeBtn.addEventListener('click', () => {
@@ -642,6 +663,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load job description from storage
   async function loadJobDescription() {
+    if (!currentTab?.id) {
+      jobStatus.className = 'status warning';
+      jobStatus.textContent = 'ℹ️ Unable to determine the active job tab.';
+      return;
+    }
     const url = currentTab?.url || '';
     if (/^(chrome:|edge:|about:|chrome-extension:|devtools:|view-source:)/i.test(url)) {
       jobStatus.className = 'status warning';
