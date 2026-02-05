@@ -198,6 +198,10 @@
   function extractCandidates() {
     const candidates = [];
     const seen = new Set();
+    const DEFAULT_MIN_LENGTH = 1000;
+    const SHORT_TEXT_MIN_LENGTH = 300;
+    const MAX_TEXT_LENGTH = 20000;
+    const JOB_KEYWORD_REGEX = /\b(job\s+description|description:|responsibilities:|qualifications:|requirements:|what you['']ll do|minimum qualifications|nice to have|about this role|in this role|what we\'re looking for|about the role|the role|what you will do)\b/i;
     
     console.log('ResAid: Starting candidate extraction...');
     
@@ -242,12 +246,44 @@
       '[data-cy*="job-description"]'
     ];
 
+    const shortTextSelectors = new Set([
+      '[class*="job-description"]',
+      '[class*="jobDescription"]',
+      '[id*="job-description"]',
+      '[id*="jobDescription"]',
+      '[data-qa*="job-description"]',
+      '[data-testid*="job-description"]',
+      '.job-description',
+      '.description__text',
+      '.show-more-less-html__markup',
+      '.posting-description',
+      '.job-posting__description',
+      '[data-testid="job-description"]',
+      '.job-description-content',
+      '.posting-content',
+      '.job-content',
+      '.ashby-job-posting-right-pane',
+      '[role="tabpanel"]',
+      '[id="overview"]',
+      '[class*="_description_"]',
+      '[class*="_descriptionText_"]'
+    ]);
+
+    const hasJobContentSignals = (text) => {
+      const bulletCount = (text.match(/^[\s]*[-•*][\s]/m) || []).length;
+      return JOB_KEYWORD_REGEX.test(text) || bulletCount >= 3;
+    };
+
     for (const selector of JOB_DESCRIPTION_SELECTORS) {
       const elements = document.querySelectorAll(selector);
       if (elements.length > 0) console.log(`ResAid: Found ${elements.length} elements for selector: ${selector}`);
       for (const el of elements) {
         const text = (el.innerText || el.textContent || '').trim();
-        if (text && text.length >= 1000 && text.length <= 15000 && !seen.has(text)) {
+        const minLength = shortTextSelectors.has(selector) ? SHORT_TEXT_MIN_LENGTH : DEFAULT_MIN_LENGTH;
+        const maxLength = shortTextSelectors.has(selector) ? MAX_TEXT_LENGTH : 15000;
+        const shouldRequireSignals = shortTextSelectors.has(selector);
+        const hasSignals = shouldRequireSignals ? hasJobContentSignals(text) : true;
+        if (text && text.length >= minLength && text.length <= maxLength && !seen.has(text) && hasSignals) {
           if (isVisible(el) && !isInNavFooter(el) && !isNavigationNoise(text, el)) {
             candidates.push({ element: el, text });
             seen.add(text);
@@ -262,7 +298,9 @@
     console.log(`ResAid: Found ${containers.length} generic containers`);
     for (const el of containers) {
       const text = (el.innerText || el.textContent || '').trim();
-      if (text && text.length >= 1000 && text.length <= 20000 && !seen.has(text)) {
+      const hasSignals = hasJobContentSignals(text);
+      const meetsLength = text.length >= DEFAULT_MIN_LENGTH || (text.length >= 600 && hasSignals);
+      if (text && meetsLength && text.length <= MAX_TEXT_LENGTH && !seen.has(text)) {
         if (isVisible(el) && !isInNavFooter(el) && !isNavigationNoise(text, el)) {
           candidates.push({ element: el, text });
           seen.add(text);
@@ -279,10 +317,10 @@
     let fallbackChecked = 0;
     for (const el of allDivs) {
       const text = (el.innerText || el.textContent || '').trim();
-      if (text && text.length >= 1000 && text.length <= 20000 && !seen.has(text)) {
+      if (text && text.length >= DEFAULT_MIN_LENGTH && text.length <= MAX_TEXT_LENGTH && !seen.has(text)) {
         fallbackChecked++;
         // Look for multiple job posting indicators
-        const hasJobKeywords = /\b(job\s+description|description:|responsibilities:|qualifications:|requirements:|what you['']ll do|minimum qualifications|nice to have|about this role|in this role)\b/i.test(text);
+        const hasJobKeywords = JOB_KEYWORD_REGEX.test(text);
         if (hasJobKeywords) {
           const visible = isVisible(el);
           const inNav = isInNavFooter(el);
