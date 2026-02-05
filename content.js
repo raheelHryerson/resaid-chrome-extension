@@ -344,6 +344,15 @@
     if (element) {
       const className = (element.className || '').toLowerCase();
       const id = (element.id || '').toLowerCase();
+      if (className.includes('ashby-job-posting') ||
+          className.includes('_description_') ||
+          className.includes('_descriptiontext_') ||
+          className.includes('job-posting__description')) {
+        return false; // Ashby job description containers
+      }
+      if (element.matches?.('[role="tabpanel"][id="overview"]')) {
+        return false;
+      }
       if (className.includes('job-description') || 
           className.includes('jobdescription') || 
           id.includes('job-description') || 
