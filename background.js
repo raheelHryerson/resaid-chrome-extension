@@ -32,9 +32,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'OPEN_POPUP') {
     const sourceTabId = message.tabId || sender.tab?.id || null;
-    if (sourceTabId) {
-      chrome.storage.session.set({ popupTabId: sourceTabId }).catch(() => {});
-    }
+    chrome.storage.session
+      .set({
+        popupTabId: sourceTabId,
+        popupAutoAnalyze: true
+      })
+      .catch(() => {});
     const openPopupWindow = () => {
       const url = chrome.runtime.getURL(`popup.html${sourceTabId ? `?tabId=${sourceTabId}` : ''}`);
       return chrome.windows.create({
