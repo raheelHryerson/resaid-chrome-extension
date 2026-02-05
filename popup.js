@@ -7,9 +7,10 @@ let lastPremiumAnalysisKey = null;
 let explanationVisible = false;
 const premiumAnalysisCacheKey = 'premiumAnalysisCache';
 let currentJobHost = 'unknown';
+let currentTabId = null;
 
-function buildPremiumCacheKey(resumeId, jobDescriptionText, host) {
-  const normalized = `${resumeId || 'unknown'}|${host || 'unknown'}|${jobDescriptionText || ''}`.toLowerCase();
+function buildPremiumCacheKey(resumeId, jobDescriptionText, host, tabId) {
+  const normalized = `${resumeId || 'unknown'}|${host || 'unknown'}|${tabId || 'unknown'}|${jobDescriptionText || ''}`.toLowerCase();
   let hash = 0;
   for (let i = 0; i < normalized.length; i++) {
     hash = (hash << 5) - hash + normalized.charCodeAt(i);
@@ -25,6 +26,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Get current tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTab = tab;
+  currentTabId = tab?.id || null;
 
   // Load profile status
   await loadProfileStatus();
@@ -485,7 +487,7 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
   premiumText.style.display = 'none';
   const { forceRefresh = false } = options;
   const resumeId = document.getElementById('resumeSelect')?.value || '';
-  const cacheKey = buildPremiumCacheKey(resumeId, jobDescriptionText || '', currentJobHost);
+  const cacheKey = buildPremiumCacheKey(resumeId, jobDescriptionText || '', currentJobHost, currentTabId);
 
   if (!forceRefresh) {
     const cached = await chrome.storage.local.get([premiumAnalysisCacheKey]);
@@ -655,6 +657,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     currentTab = tabs[0];
   }
+
+  currentTabId = currentTab?.id || null;
 
   if (currentTab?.url) {
     try {

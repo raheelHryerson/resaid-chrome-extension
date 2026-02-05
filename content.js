@@ -44,6 +44,7 @@
     
     // Greenhouse
     '#content .content',
+    '.job__description',
     
     // Lever
     '.posting-description',
@@ -231,6 +232,7 @@
       '.job-posting__description',
       '[data-testid="job-description"]',
       '.job-description-content',
+      '.job__description',
       '.posting-content',
       '.job-content',
       '.ashby-job-posting-right-pane',
@@ -260,6 +262,7 @@
       '.job-posting__description',
       '[data-testid="job-description"]',
       '.job-description-content',
+      '.job__description',
       '.posting-content',
       '.job-content',
       '.ashby-job-posting-right-pane',
@@ -1223,7 +1226,7 @@
     
     // Use numeric confidence if available (from new algorithm)
     if (typeof jd.confidence === 'number') {
-      return jd.confidence >= 0.5; // Accept if confidence >= 0.5
+      return jd.confidence >= 0.45; // Accept if confidence >= 0.45
     }
     
     // Fallback to old logic for backward compatibility
@@ -1865,8 +1868,29 @@ Answer the question directly and naturally, as if the applicant is writing it th
     document.body.appendChild(modal);
   }
 
+  // Check if badge was dismissed on this page
+  function isBadgeDismissed() {
+    const pageUrl = window.location.href;
+    const dismissedUrls = JSON.parse(localStorage.getItem('resaidDismissedBadgeUrls') || '{}');
+    return dismissedUrls[pageUrl] === true;
+  }
+
+  // Mark badge as dismissed for this page
+  function markBadgeDismissed() {
+    const pageUrl = window.location.href;
+    const dismissedUrls = JSON.parse(localStorage.getItem('resaidDismissedBadgeUrls') || '{}');
+    dismissedUrls[pageUrl] = true;
+    localStorage.setItem('resaidDismissedBadgeUrls', JSON.stringify(dismissedUrls));
+  }
+
   // Show floating fit score badge on page (now triggers modal)
   function showFitScoreBadge() {
+    // Skip if badge was dismissed on this page
+    if (isBadgeDismissed()) {
+      console.log('Badge dismissed on this page, skipping display');
+      return;
+    }
+
     // Remove existing badge
     const existing = document.getElementById('resaid-fit-badge');
     if (existing) existing.remove();
@@ -1925,6 +1949,7 @@ Answer the question directly and naturally, as if the applicant is writing it th
     if (closeButton) {
       closeButton.addEventListener('click', (event) => {
         event.stopPropagation();
+        markBadgeDismissed();
         badge.remove();
       });
     }
