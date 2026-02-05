@@ -31,12 +31,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'OPEN_POPUP') {
-    chrome.action.openPopup().then(() => {
-      sendResponse({ success: true });
-    }).catch((error) => {
-      console.error('ResAid: Failed to open popup:', error);
-      sendResponse({ success: false, error: error.message });
-    });
+    const openPopupWindow = () => {
+      const url = chrome.runtime.getURL('popup.html');
+      return chrome.windows.create({
+        url,
+        type: 'popup',
+        width: 420,
+        height: 640
+      });
+    };
+
+    chrome.action.openPopup()
+      .then(() => sendResponse({ success: true, method: 'action' }))
+      .catch((error) => {
+        console.warn('ResAid: Failed to open action popup, falling back to window:', error);
+        openPopupWindow()
+          .then(() => sendResponse({ success: true, method: 'window' }))
+          .catch((windowError) => {
+            console.error('ResAid: Failed to open popup window:', windowError);
+            sendResponse({ success: false, error: windowError.message || error.message });
+          });
+      });
     return true;
   }
 

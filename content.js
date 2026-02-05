@@ -1880,13 +1880,18 @@ Answer the question directly and naturally, as if the applicant is writing it th
       z-index: 999998;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
-      padding: 16px 20px;
+      padding: 18px 22px;
       border-radius: 16px;
       box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       cursor: pointer;
       transition: all 0.3s ease;
-      min-width: 180px;
+      min-width: 220px;
+      max-width: 280px;
+      line-height: 1.4;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     `;
 
     badge.innerHTML = `
@@ -1901,9 +1906,9 @@ Answer the question directly and naturally, as if the applicant is writing it th
         line-height: 1;
         cursor: pointer;
       ">×</button>
-      <div style="font-size: 11px; opacity: 0.9; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Resume-Job Fit</div>
-      <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Click to see resume Job-fit score</div>
-      <div style="font-size: 9px; opacity: 0.7; text-align: center;">Opens a loading view while scores are generated.</div>
+      <div style="font-size: 12px; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px;">Resume-Job Fit</div>
+      <div style="font-size: 13px; opacity: 0.95;">Click to see resume job-fit score.</div>
+      <div style="font-size: 10px; opacity: 0.7;">Opens a loading view while scores are generated.</div>
     `;
 
     badge.addEventListener('mouseenter', () => {
