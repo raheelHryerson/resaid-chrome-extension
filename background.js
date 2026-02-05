@@ -257,16 +257,59 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'LOAD_RESUME_DATA') {
     (async () => {
       try {
+        const resumeId = message.resumeId || null;
+        const decodeBase64Text = (base64) => {
+          if (!base64) return '';
+          try {
+            const decoded = atob(base64);
+            return decoded.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim();
+          } catch (error) {
+            console.warn('ResAid: Failed to decode base64 resume content:', error);
+            return '';
+          }
+        };
+
         // First try to get from local storage (cached)
-        const cached = await chrome.storage.local.get(['resumeText', 'resumeLastUpdated']);
+        const cached = await chrome.storage.local.get(['resumeText', 'resumeLastUpdated', 'resumeTextCache']);
         const now = Date.now();
         const oneHour = 60 * 60 * 1000; // 1 hour in milliseconds
+
+        if (resumeId && cached.resumeTextCache?.[resumeId]?.text) {
+          console.log('ResAid: Using cached resume data for resumeId', resumeId);
+          sendResponse({ success: true, data: cached.resumeTextCache[resumeId].text });
+          return;
+        }
 
         // If we have cached data less than 1 hour old, use it
         if (cached.resumeText && cached.resumeLastUpdated && (now - cached.resumeLastUpdated) < oneHour) {
           console.log('ResAid: Using cached resume data');
           sendResponse({ success: true, data: cached.resumeText });
           return;
+        }
+
+        // Try to load resume data from local storage (uploaded resumes)
+        const localResume = await chrome.storage.local.get(['resumes', 'currentResume']);
+        const resumes = localResume.resumes || [];
+        const currentResume = localResume.currentResume || null;
+        const selectedResume = (resumeId
+          ? resumes.find((r) => r.id === resumeId || r.fileName === resumeId)
+          : currentResume) || currentResume || resumes[0];
+
+        if (selectedResume) {
+          const resumeText = selectedResume.parsedData
+            ? JSON.stringify(selectedResume.parsedData)
+            : (selectedResume.content || selectedResume.text || '');
+          const decodedText = resumeText || decodeBase64Text(selectedResume.contentBase64 || selectedResume.fileContent || '');
+          if (decodedText) {
+            const resumeTextCache = cached.resumeTextCache || {};
+            if (resumeId) {
+              resumeTextCache[resumeId] = { text: decodedText, savedAt: now };
+              await chrome.storage.local.set({ resumeTextCache });
+            }
+            console.log('ResAid: Using locally stored resume data');
+            sendResponse({ success: true, data: decodedText });
+            return;
+          }
         }
 
         // Otherwise, try to fetch from API

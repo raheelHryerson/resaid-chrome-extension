@@ -503,7 +503,10 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
     return;
   }
 
-  const resumeResponse = await chrome.runtime.sendMessage({ type: 'LOAD_RESUME_DATA' });
+  const resumeResponse = await chrome.runtime.sendMessage({
+    type: 'LOAD_RESUME_DATA',
+    resumeId
+  });
   const resumeText = resumeResponse?.success ? resumeResponse.data : '';
   if (!resumeText || !jobDescriptionText) {
     premiumText.textContent = 'Need both a resume and a job description to generate the premium explanation.';
