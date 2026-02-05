@@ -6,9 +6,10 @@ let hasFitAccess = false;
 let lastPremiumAnalysisKey = null;
 let explanationVisible = false;
 const premiumAnalysisCacheKey = 'premiumAnalysisCache';
+let currentJobHost = 'unknown';
 
-function buildPremiumCacheKey(resumeId, jobDescriptionText) {
-  const normalized = `${resumeId || 'unknown'}|${jobDescriptionText || ''}`.toLowerCase();
+function buildPremiumCacheKey(resumeId, jobDescriptionText, host) {
+  const normalized = `${resumeId || 'unknown'}|${host || 'unknown'}|${jobDescriptionText || ''}`.toLowerCase();
   let hash = 0;
   for (let i = 0; i < normalized.length; i++) {
     hash = (hash << 5) - hash + normalized.charCodeAt(i);
@@ -317,13 +318,13 @@ function buildPremiumPrompt(jobDescription, resumeText) {
 
 Compare the job description and the resume. Calculate a match score out of 100% by breaking it down into the following fixed categories and weights:
 
-Skills 35%
-Experience 25%
-Role 15%
-Seniority 7%
-Education 8%
-Certifications 5%
-Keywords 5%
+Skills 
+Experience 
+Role 
+Seniority 
+Education 
+Certifications 
+Keywords 
 
 For each category, output only the calculated percentage, using exactly the following format and nothing else:
 
@@ -432,13 +433,23 @@ function parseFitAnalysisResponse(text) {
     return null;
   }
 
-  const explanationSection = text.split(/Explanation\s*:\s*/i)[1] || '';
-  const explanationPoints = explanationSection
+  const explanationSection = text.split(/Explanation\s*:?\s*/i)[1] || '';
+  let explanationPoints = explanationSection
     .split(/\r?\n/)
     .map(line => line.trim())
     .filter(line => line.length > 0)
     .map(line => line.replace(/^[-•\d.\s]+/, '').trim())
     .filter(line => line.length > 0);
+
+  if (explanationPoints.length === 0) {
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const scoreLineRegex = /^(Skills|Experience|Role|Seniority|Education|Certifications|Keywords)\s*:\s*\d{1,3}%/i;
+    explanationPoints = lines
+      .filter(line => !scoreLineRegex.test(line))
+      .filter(line => /^[-•]/.test(line))
+      .map(line => line.replace(/^[-•\d.\s]+/, '').trim())
+      .filter(line => line.length > 0);
+  }
 
   const scoreComponents = {
     skillsMatch: skills,
@@ -474,7 +485,7 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
   premiumText.style.display = 'none';
   const { forceRefresh = false } = options;
   const resumeId = document.getElementById('resumeSelect')?.value || '';
-  const cacheKey = buildPremiumCacheKey(resumeId, jobDescriptionText);
+  const cacheKey = buildPremiumCacheKey(resumeId, jobDescriptionText || '', currentJobHost);
 
   if (!forceRefresh) {
     const cached = await chrome.storage.local.get([premiumAnalysisCacheKey]);
@@ -487,10 +498,18 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
   }
 
   if (!isPremiumUser) {
-    const usage = await chrome.storage.sync.get(['fitFreeUsageCount']);
-    const count = usage.fitFreeUsageCount || 0;
+    const usage = await chrome.storage.sync.get(['fitFreeUsageCount', 'fitFreeUsageMonth']);
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const usageMonth = usage.fitFreeUsageMonth || '';
+    let count = usage.fitFreeUsageCount || 0;
+
+    if (!usageMonth || usageMonth !== currentMonth) {
+      count = 0;
+      await chrome.storage.sync.set({ fitFreeUsageCount: 0, fitFreeUsageMonth: currentMonth });
+    }
+
     if (count >= 1) {
-      premiumText.textContent = 'Free fit analysis used. Upgrade to premium for more.';
+      premiumText.textContent = 'Free fit analysis used for this month. Upgrade to premium for more.';
       hasFitAccess = false;
       updatePremiumUI(isPremiumUser);
       return null;
@@ -503,12 +522,20 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
     return;
   }
 
-  const resumeResponse = await chrome.runtime.sendMessage({ type: 'LOAD_RESUME_DATA' });
+  const resumeResponse = await chrome.runtime.sendMessage({
+    type: 'LOAD_RESUME_DATA',
+    resumeId
+  });
   const resumeText = resumeResponse?.success ? resumeResponse.data : '';
   if (!resumeText || !jobDescriptionText) {
     premiumText.textContent = 'Need both a resume and a job description to generate the premium explanation.';
     return;
   }
+
+  console.log('ResAid: Fit analysis inputs (job description length):', jobDescriptionText.length);
+  console.log('ResAid: Fit analysis inputs (job description text):', jobDescriptionText.substring(0, 6000));
+  console.log('ResAid: Fit analysis inputs (resume length):', resumeText.length);
+  console.log('ResAid: Fit analysis inputs (resume text):', resumeText.substring(0, 6000));
 
   const prompt = buildPremiumPrompt(jobDescriptionText, resumeText);
   premiumText.textContent = 'Generating explanation...';
@@ -541,6 +568,7 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
     const data = await response.json();
     const content = data?.choices?.[0]?.message?.content?.trim() || '';
     console.log('ResAid: LLM fit analysis response received.');
+    console.log('ResAid: LLM raw response:', content);
     const parsed = parseFitAnalysisResponse(content);
     if (!parsed) {
       premiumText.textContent = 'Could not parse the fit analysis response.';
@@ -564,9 +592,14 @@ async function generatePremiumAnalysis(jobDescriptionText, options = {}) {
     await chrome.storage.local.set({ [premiumAnalysisCacheKey]: cacheMap });
     console.log('ResAid: LLM fit analysis cached.');
     if (!isPremiumUser) {
-      const usage = await chrome.storage.sync.get(['fitFreeUsageCount']);
-      const count = usage.fitFreeUsageCount || 0;
-      await chrome.storage.sync.set({ fitFreeUsageCount: count + 1 });
+      const usage = await chrome.storage.sync.get(['fitFreeUsageCount', 'fitFreeUsageMonth']);
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      const usageMonth = usage.fitFreeUsageMonth || '';
+      const count = usageMonth === currentMonth ? (usage.fitFreeUsageCount || 0) : 0;
+      await chrome.storage.sync.set({
+        fitFreeUsageCount: count + 1,
+        fitFreeUsageMonth: currentMonth
+      });
       hasFitAccess = false;
       updatePremiumUI(isPremiumUser);
     }
@@ -593,9 +626,54 @@ document.addEventListener('DOMContentLoaded', async () => {
   let lastJobDescriptionText = '';
   // Backend API key removed. All data now uses local storage.
 
-  // Get current tab
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  currentTab = tabs[0];
+  // Get current tab (prefer explicit tabId when opened from badge)
+  const params = new URLSearchParams(window.location.search || '');
+  const explicitTabId = Number(params.get('tabId')) || null;
+  const autoAnalyzeParam = params.get('autoAnalyze');
+  let shouldAutoAnalyze = autoAnalyzeParam === null ? true : autoAnalyzeParam === '1';
+  if (explicitTabId) {
+    try {
+      currentTab = await chrome.tabs.get(explicitTabId);
+    } catch (error) {
+      console.warn('ResAid: Failed to resolve explicit tabId, falling back to active tab.', error);
+    }
+  }
+  if (!currentTab) {
+    const session = await chrome.storage.session.get(['popupTabId', 'popupAutoAnalyze']);
+    if (session.popupAutoAnalyze) {
+      shouldAutoAnalyze = true;
+    }
+    if (session.popupTabId) {
+      try {
+        currentTab = await chrome.tabs.get(session.popupTabId);
+      } catch (error) {
+        console.warn('ResAid: Failed to resolve session tabId, falling back to active tab.', error);
+      }
+    }
+  }
+  if (!currentTab) {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    currentTab = tabs[0];
+  }
+
+  if (currentTab?.url) {
+    try {
+      currentJobHost = new URL(currentTab.url).host || 'unknown';
+    } catch (error) {
+      console.warn('ResAid: Unable to parse host from tab URL.', error);
+    }
+  }
+
+  if (!shouldAutoAnalyze && currentTab?.id) {
+    try {
+      const badgeText = await chrome.action.getBadgeText({ tabId: currentTab.id });
+      if (badgeText) {
+        shouldAutoAnalyze = true;
+      }
+    } catch (error) {
+      console.warn('ResAid: Unable to read badge text for auto-analyze.', error);
+    }
+  }
 
   if (premiumUpgradeBtn) {
     premiumUpgradeBtn.addEventListener('click', () => {
@@ -608,7 +686,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const premiumText = document.getElementById('premiumAnalysisText');
       if (!premiumText) return;
       if (premiumText.textContent === 'Generate a detailed explanation for this match.') {
-        calculateFitScore({ forceRefresh: true });
+        calculateFitScore({ autoShowExplanation: true });
         return;
       }
       if (!explanationVisible) {
@@ -642,6 +720,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load job description from storage
   async function loadJobDescription() {
+    if (!currentTab?.id) {
+      jobStatus.className = 'status warning';
+      jobStatus.textContent = 'ℹ️ Unable to determine the active job tab.';
+      return;
+    }
     const url = currentTab?.url || '';
     if (/^(chrome:|edge:|about:|chrome-extension:|devtools:|view-source:)/i.test(url)) {
       jobStatus.className = 'status warning';
@@ -955,9 +1038,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadJobDescription();
   await loadResumes();
 
+  isPremiumUser = await getSubscriptionStatus();
+  const usage = await chrome.storage.sync.get(['fitFreeUsageCount', 'fitFreeUsageMonth']);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const usageMonth = usage.fitFreeUsageMonth || '';
+  if (usageMonth && usageMonth !== currentMonth) {
+    await chrome.storage.sync.set({ fitFreeUsageCount: 0, fitFreeUsageMonth: currentMonth });
+  }
+  hasFitAccess = isPremiumUser || ((usage.fitFreeUsageCount || 0) < 1 || usageMonth !== currentMonth);
+  updatePremiumUI(isPremiumUser);
+
   // Calculate fit score if both job description and resume are available
   if (jobDescription && resumeSelect.value) {
-    await calculateFitScore();
+    if (shouldAutoAnalyze) {
+      await calculateFitScore({ autoShowExplanation: true });
+      await chrome.storage.session.remove(['popupAutoAnalyze']);
+    } else {
+      await calculateFitScore();
+    }
   }
 
   // Recalculate when resume changes
@@ -992,7 +1090,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!resumeId || !jobDescription) return;
 
     try {
-      const { forceRefresh = false } = options;
+      const { forceRefresh = false, autoShowExplanation = false } = options;
       const analysisKey = `${resumeId}|${jobDescription?.text?.substring(0, 200) || ''}`;
       if (!forceRefresh && lastPremiumAnalysisKey === analysisKey) return;
       lastPremiumAnalysisKey = analysisKey;
@@ -1031,15 +1129,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       lastScoreData = scoreData;
       lastJobDescriptionText = jobDescription?.text || '';
       updatePremiumUI(isPremiumUser);
+      if (autoShowExplanation && premiumText) {
+        premiumText.style.display = 'block';
+        if (refreshButton) refreshButton.textContent = 'Hide Explanation';
+        explanationVisible = true;
+      }
     } catch (err) {
       console.error('Error calculating fit score:', err);
     }
   }
 
-  isPremiumUser = await getSubscriptionStatus();
-  const usage = await chrome.storage.sync.get(['fitFreeUsageCount']);
-  hasFitAccess = isPremiumUser || (usage.fitFreeUsageCount || 0) < 1;
-  updatePremiumUI(isPremiumUser);
+  // Subscription status already resolved above.
 });
 
 // AI status is managed in extension settings.
